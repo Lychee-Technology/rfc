@@ -1,23 +1,21 @@
 # Technical Specification: LTBase Compute Engine
 
-- **Architecture Pattern:** Fluid Hybrid (Fargate Baseline + Lambda Spillover)
-- **Core Philosophy:** Fluid Intelligence (Zero Waste, Zero Config, Maximum Density)
+- **Architecture Pattern:** Hybrid Compute (Fargate Baseline + Lambda Spillover)
+- **Core Philosophy:** Zero Waste, Zero Config
 - **Application Stack:** Rust (Axum) + V8 (deno_core)
 - **Target Platform:** AWS (ARM64/Graviton)
-
 
 
 ## 1. Design Philosophy
 
 This platform is built upon a strict set of principles designed to optimize performance and cost while meeting modern web demands:
-
-  * **Compute triggers only when needed:** Resources are ephemeral or highly elastic, responding instantly to demand.
-  * **Real-time scaling from zero to peak:** Seamless transition from baseline capacity to infinite cloud burst.
-  * **Existing resources are used before scaling new ones:** We maximize the concurrency of running tasks via Async I/O Multiplexing before spinning up new infrastructure.
-  * **Billing based on actual compute usage:** The "Zero Idle Cost" strategy ensures users pay for logic execution, not I/O waiting time.
-  * **Pre-warmed instances reduce latency:** A Fargate baseline ensures the "first byte" is always fast, eliminating cold starts for steady traffic.
-  * **Supports advanced tasks:** Native support for HTTP Streaming and `waitUntil` (post-response) processing.
-  * **Zero configuration:** Users deploy code; the platform handles the scaling, routing, and isolation.
+* **Prioritize cloud-native capabilities:** Leverage built-in platform services (e.g., ALB for routing, CloudWatch for metrics, EFS for storage) over custom implementations to maximize stability and minimize maintenance overhead.  
+* **Compute triggers only when needed:** Resources are ephemeral or highly elastic, responding instantly to demand.
+* **Real-time scaling from zero to peak:** Seamless transition from baseline capacity to infinite cloud burst.
+* **Existing resources are used before scaling new ones:** We maximize the concurrency of running tasks via Async I/O Multiplexing before spinning up new infrastructure.
+* **Billing based on actual compute usage:** The "Zero Idle Cost" strategy ensures users pay for logic execution, not I/O waiting time.
+* **Pre-warmed instances reduce latency:** A Fargate baseline ensures the "first byte" is always fast, eliminating cold starts for steady traffic.
+* **Zero configuration:** Users deploy code; the platform handles the scaling, routing, and isolation.
 
 
 ## 2. High-Level Architecture
