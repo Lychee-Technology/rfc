@@ -1,9 +1,14 @@
 # Technical Specification: LTBase Compute Engine
 
-- **Architecture Pattern:** Hybrid Compute (Fargate Baseline + Lambda Spillover)
-- **Core Philosophy:** Zero Waste, Zero Config
-- **Application Stack:** Rust (Axum) + V8 (deno_core)
-- **Target Platform:** AWS (ARM64/Graviton)
+
+
+
+## 0. Problem Statement
+
+The core challenge LTBase Compute addresses is the trade-off between cost efficiency and startup latency in existing cloud compute models:
+
+1.  **AWS Lambda Cost Model:** Lambda charges based on *execution duration* (wall-clock time), not actual CPU usage. For I/O-bound applications, this results in paying for idle time while waiting for Database or remote API call operations which usually accounts for >80% of the total cost.
+2.  **Cold Start Latency:** While AWS Fargate and EC2 offer more traditional billing models, they suffer from significant cold start times (often 10s+), making them unsuitable for scale-to-zero or bursty workloads that require instant responsiveness.
 
 
 ## 1. Design Philosophy
@@ -19,6 +24,11 @@ This platform is built upon a strict set of principles designed to optimize perf
 
 
 ## 2. High-Level Architecture
+
+- **Architecture Pattern:** Hybrid Compute (Fargate Baseline + Lambda Spillover)
+- **Core Philosophy:** Zero Waste, Zero Config
+- **Application Stack:** Rust (Axum) + V8 (deno_core)
+- **Target Platform:** AWS (ARM64/Graviton)
 
 The architecture uses a "Pressure Valve" model. Traffic fills the high-efficiency Fargate baseline first. Only when these resources are fully saturated (compute-bound) does the system spill over to Lambda.
 
