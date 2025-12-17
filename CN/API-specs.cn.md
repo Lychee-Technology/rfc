@@ -20,7 +20,7 @@ LTBase API是一组遵循RESTFul语义的HTTP API。
 ### 响应
 
 * `Content-Encoding`，说明服务器端是否对响应进行了压缩，目前服务器端只支持`gzip`一种压缩格式。
-* `Retry-After`，当服务器端遇到可重试的错误（例如上游AI API报错），那么服务器可能会指定这个header，客户端应该遵循服务器的指示在一定时间后重试。服务器端会使用delay格式的Retry-After，例如 `Retry-After: 5`的意思是指少延迟5秒后再重试。
+* `Retry-After`，当服务器端遇到可重试的错误（例如上游AI API报错），那么服务器可能会指定这个header，客户端应该遵循服务器的指示在一定时间后重试。服务器端会使用delay格式的Retry-After，单位为秒。例如 `Retry-After: 5`的意思是指延迟5秒后再重试。
 
 ## 错误代码
 
@@ -52,10 +52,8 @@ LTBase的AI API实现了多模态的非机构化数据向结构化数据转换�
     "note_id": "<uuid>",
     "created_at": <epoch millisecond>,
     "updated_at": <epoch millisecond>,
-    "raw": {
-        "type": "text|audio|image",
-        "data": "text or url of audio/image file"
-    },
+    "type": "text|audio|image",
+    "data": "text or url of audio/image file",
     "models": [
        {
           "type": "<model/schema name>",
@@ -114,7 +112,7 @@ Body:
 
 ### 列出某个owner-id所属的notes
 
-请求URL：`GET /api/ai/v1/notes`
+请求URL：`GET /api/ai/v1/notes?owner_id=<owner_id>`
 
 ** Response **
 ```json
@@ -136,6 +134,27 @@ Body:
 ### 获取某个note的详情
 
 请求URL：`GET /api/ai/v1/notes/{note_id}`
+
+**Response**
+```json
+{
+    "note_id": "<uuid>",
+    "owner_id": "<string>",
+    "created_at": <epoch millisecond>,
+    "updated_at": <epoch millisecond>,
+    "type": "text/plain",
+    "data": "<text or url of audio/image file>",
+    "summary": "<text>",
+    "models": [
+       {
+          "type": "<model/schema name>",
+          "data": {
+              "<field1>": "...",
+          }
+      }
+    ]
+}
+```
 
 
 ## Delete Note
@@ -184,7 +203,7 @@ Body:
 
 ### 获取实体数据
 
-执行获取实体操作时，客户端可以指定要求返回的attributes，Forma会自动根据[Schema](./JSON-Schema-Ext.md) 中定义的 `$ref` 和 `unique prorperty` 属性去相应父实体记录中加载数据。例如：
+执行获取实体操作时，客户端可以指定要求返回的attributes，LTBase会自动根据[Schema](./JSON-Schema-Ext.md) 中定义的 `$ref` 和 `unique property` 属性去相应父实体记录中加载数据。例如：
 visit schema 里的contactSnapshot是引用了 `lead.contact` 。在获取visit的时候，BE会自动根据ref 和 ref id （在这里就是lead id）去相应的lead记录中加载 contact 数据。
 
 #### List
@@ -279,7 +298,7 @@ Search API 支持更复杂的查询条件组合、like以及全文检索(拉丁�
     "c": [
       {
         "a": "age",
-        "v": "gtr:18"
+        "v": "gt:18"
       },
       {
         "l": "or",
