@@ -22,6 +22,14 @@ LTBase API是一组遵循RESTFul语义的HTTP API。
 * `Content-Encoding`，说明服务器端是否对响应进行了压缩，目前服务器端只支持`gzip`一种压缩格式。
 * `Retry-After`，当服务器端遇到可重试的错误（例如上游AI API报错），那么服务器可能会指定这个header，客户端应该遵循服务器的指示在一定时间后重试。服务器端会使用delay格式的Retry-After，单位为秒。例如 `Retry-After: 5`的意思是指延迟5秒后再重试。
 
+## 成功代码
+
+LTBase API使用标准的HTTP状态码来表示请求的处理结果。
+
+* `200 Ok`: 对于大多数API，`200`代表调用成功。
+* `201 Created`: 对于创建实体的API，`201`代表调用成功。
+* `204 No Content`：对于删除实体的API，由于它的响应没有body，所以使用`204`。
+
 ## 错误代码
 
 LTBase API使用标准的HTTP状态码来表示请求的处理结果。以下是一些常见的错误代码：
@@ -70,7 +78,7 @@ LTBase的AI API实现了多模态的非机构化数据向结构化数据转换�
 
 * `${note.summary}`：AI从note中提取的摘要信息。
 * `${note.type}`：note的类型，例如 `text/plain`。
-* `${note.data}`：note的原始数据内容。
+* `${note.data}`：note的原始数据内容，只能用于type是`text/*`类型的note。
 * `${note.id}`：note的id。
 
 
@@ -182,7 +190,7 @@ Body:
 
 ### 创建一个实体
 
-请求URL：`POST /api/schemas/v1/{schema_name}`
+请求URL：`POST /api/v1/{schema_name}`
 
 #### Body:
 ```json
@@ -201,13 +209,22 @@ Body:
 }
 ```
 
+### 删除一个实体
+
+请求URL： `DELETE /api/v1/{schema_name}/{row_id}`
+
+#### Response：
+
+只通过HTTP Status Code来表示是否删除成功，无body。
+
+
 ### 获取实体数据
 
 执行获取实体操作时，客户端可以指定要求返回的attributes，LTBase会自动根据[Schema](./JSON-Schema-Ext.md) 中定义的 `$ref` 和 `unique property` 属性去相应父实体记录中加载数据。例如：
 visit schema 里的contactSnapshot是引用了 `lead.contact` 。在获取visit的时候，BE会自动根据ref 和 ref id （在这里就是lead id）去相应的lead记录中加载 contact 数据。
 
 #### List
-请求URL：`GET /api/schemas/v1/{schema_name}?page=<page>&page_size=<page_size>&{attr_name}={<operator>:<value>}&order_by=<attr_name>:asc|desc&attrs=<attr1>,<attr2>,...`
+请求URL：`GET /api/v1/{schema_name}?page=<page>&page_size=<page_size>&{attr_name}={<operator>:<value>}&order_by=<attr_name>:asc|desc&attrs=<attr1>,<attr2>,...`
 
 List API 支持分页和按属性过滤查询，但是不支持复杂的查询条件组合。所有的过滤条件都是`AND`关系。List API不会自动根据[Schema](./JSON-Schema-Ext.md) 中定义的 `$ref` 和 `unique prorperty` 属性去相应父实体记录中加载数据。
 
@@ -238,7 +255,7 @@ List API不支持如下操作，如果需要更复杂的查询，请使用Search
 
 #### 按照Row ID获取实体
 
-请求URL：`GET /api/schemas/v1/{schema_name}/{row_id}?attrs=<attr1>,<attr2>,...`
+请求URL：`GET /api/v1/{schema_name}/{row_id}?attrs=<attr1>,<attr2>,...`
 
 * `attrs` 用于指定返回的属性字段（JSON Path），多个属性用逗号分隔。如果不指定，则返回所有属性字段。
 
@@ -254,7 +271,7 @@ List API不支持如下操作，如果需要更复杂的查询，请使用Search
 
 ### 更新一个客户定义的模型的数据
 
-URL：`PUT /api/schemas/v1/{schema_name}/{row_id}?attrs=<attr1>,<attr2>,...`
+URL：`PUT /api/v1/{schema_name}/{row_id}?attrs=<attr1>,<attr2>,...`
 
 * `attrs` 用于指定返回的属性字段，多个属性用逗号分隔。如果不指定，则返回所有属性字段。
 
@@ -285,7 +302,7 @@ Search API 支持更复杂的查询条件组合、like以及全文检索(拉丁�
 
 使用OLAP存储的好处是可以支持更复杂的查询条件组合和更高效的查询性能，缺点是数据有一定的延迟（通常在几分钟以内）。如果搜索请求中同时接受OLTP和OLAP存储，那么系统会优先使用OLTP存储进行搜索，如果发现无法使用OLTP存储（例如没有索引），那么会自动切换到OLAP存储。
 
-请求URL：`POST /api/schemas/v1/{schema_name}/search?page=<page>&page_size=<page_size>&attrs=<attr1>,<attr2>,...`
+请求URL：`POST /api/v1/{schema_name}/search?page=<page>&page_size=<page_size>&attrs=<attr1>,<attr2>,...`
 
 ```json
 {
