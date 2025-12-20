@@ -79,7 +79,7 @@ LTBase的AI API实现了多模态的非机构化数据向结构化数据转换�
 * `${note.summary}`：AI从note中提取的摘要信息。
 * `${note.type}`：note的类型，例如 `text/plain`。
 * `${note.data}`：note的原始数据内容，只能用于type是`text/*`类型的note。
-* `${note.id}`：note的id。
+* `${note.note_id}`：note的id。
 
 
 ### 添加一个AI Note
