@@ -6,7 +6,7 @@ Context: Scaling an EAV-based system for high-performance OLAP and Advanced Sear
 
 LTBase utilizes an EAV (Entity-Attribute-Value) design. While efficient for OLTP scenarios with flexible schemas, EAV models perform poorly (30x slower than wide tables in parquet or worse) for cross-entity joins in analytical contexts.
 
-This specification defines a **Real-Time Lakehouse Architecture**. Data is synchronized from the OLTP database to an S3 Data Lake (Parquet) via CDC. The system employs **DuckDB** as a federated query engine to merge historical data (S3) with real-time buffers (Postgres), providing sub-second freshness without heavy ETL latency.
+This specification defines a **Real-Time Lakehouse Architecture**. Data is synchronized from the OLTP database to an S3 Data Lake (Parquet) via Change Data Capture (CDC). The system employs **DuckDB** as a federated query engine to merge historical data (S3) with real-time buffers (Postgres), providing sub-second freshness without heavy ETL latency.
 
 # **2. System Architecture**
 
@@ -25,12 +25,15 @@ The architecture decouples storage (S3) from compute (DuckDB) while bridging the
 
 This table serves dual purposes: a buffer for S3 flushing and a source for real-time queries.
 
-| Field      | Type     | Description                                          |
-| :--------- | :------- | :--------------------------------------------------- |
-| time_slot  | BIGINT   | Unix timestamp (ms). **Must be strictly monotonic.** |
-| schema_id  | SMALLINT | ID of the entity schema.                             |
-| row_id     | UUID     | UUID v7.                                             |
-| deleted_at | BIGINT   | Soft delete timestamp. 0 or NULL indicates Active.   |
+| Field      | Type     | Description                                                                   |
+| :--------- | :------- | :---------------------------------------------------------------------------- |
+| changed_at | BIGINT   | Unix timestamp (ms).                                                          |
+| schema_id  | SMALLINT | ID of the entity schema.                                                      |
+| row_id     | UUID     | UUID v7.                                                                      |
+| deleted_at | BIGINT   | Soft delete timestamp. 0 or NULL indicates Active.                            |
+| flushed_at | BIGINT   | Unix timestamp (ms) when the record was flushed to S3. 0 indicates unflushed. |
+
+* Primary Key: `(schema_id, row_id, flushed_at)` to allow multiple versions per row.
 
 ### **3.2 Ingestion Strategy: Smart Flushing**
 
