@@ -46,9 +46,8 @@ Stores metadata needed to interpret the mmapped file:
 
 ```rust
 struct FileHeader {  
-    magic: [u8; 4],         // e.g. b"RTFM"  
+    magic: [u8; 6],         // b"LTBase"  
     version: u16,  
-    _pad: u16,              // alignment  
     root_node_off: u64,     // file offset for root node  
     node_count: u32,  
     string_pool_off: u64,  
@@ -149,8 +148,7 @@ Given a URL path like:
 
 `/categories/100/products/abc`
 
-1. **Split path into segments** by `/`
-    `["categories", "100", "products", "abc"]`
+1. **Split path into segments** by `/` to `["categories", "100", "products", "abc"]`
 
 2. **Start at root node** using `root_node_off`
 
@@ -176,7 +174,7 @@ This lookup is **O(L)** where `L` is number of segments, independent of number o
 
 ### **4.1 Memory Mapping in Rust**
 
-Rust crates like memmap2 provide safeish bindings:
+Rust crates like [memmap2](https://docs.rs/memmap2/latest/memmap2/) provide corss platform bindings for memory mapped buffers :
 
 ```rust
 use memmap2::MmapOptions;  
@@ -252,14 +250,13 @@ In this code, every access is just memory reads over mmapped data.
 
 ### **Safety**
 
-Using mmap in Rust is inherently unsafe if interpreted as normal references, because Rust’s borrow checker cannot guarantee immutability or alignment from raw bytes. Recommended practice is:
+Using `mmap` in Rust is inherently unsafe if interpreted as normal references, because Rust’s borrow checker cannot guarantee immutability or alignment from raw bytes. Recommended practice is:
 
 * Use unsafe blocks in limited, audited helper functions
 * Do not expose raw pointers widely
 * Keep the mmapped slice alive as long as interpretations remain valid
 
-These patterns are common in tools like *fst* that do direct indexing on mmapped compressed data. 
-
+These patterns are common in tools like [*fst*](https://github.com/BurntSushi/fst/) that do direct indexing on mmapped compressed data. 
 
 ## **6. Control Plane Build Process**
 
@@ -294,4 +291,68 @@ It leverages:
 * **Rust integration** with controlled unsafe for interpreting bytes as structures.
 
 
+##  **8. Appendix**
 
+### 8.1 Full File Layout
+
+```
++======================== FILE HEADER ========================+
+| magic                                                       |
+| version                                                     |
+| root_node_offset                                            |
+| node_count                                                  |
+| string_pool_offset                                          |
+| string_pool_len                                             |
+| handler_pool_offset                                         |
+| handler_pool_len                                            |
++=============================================================+
+
++======================= NODE RECORDS ========================+
+| NodeRecord 0                                                |
++-------------------------------------------------------------+
+| NodeRecord 1                                                |
++-------------------------------------------------------------+
+| ...                                                         |
++=============================================================+
+
++===================== CHILD LIST BUFFERS ====================+
+|           (Child List #1)                                   |
+|           +-----------------------------+                   |
+|           | u8 child_count              |                   |
+|           +-----------------------------+                   |
+|           | ChildEntry #0               |                   |
+|           +-----------------------------+                   |
+|           | ChildEntry #1               |                   |
+|           +-----------------------------+                   |
+|           | ChildEntry #2               |                   |
+|           +-----------------------------+                   |
+|           | ...                         |                   |
+|           +-----------------------------+                   |
+|           | ChildEntry #N               |                   |
+|           +-----------------------------+                   |
++-------------------------------------------------------------+
+|           (Child List #2)                                   |
+|           ...                                               |
++-------------------------------------------------------------+
+| ...                                                         |
++=============================================================+
+
++======================= STRING POOL =========================+
+| "categories"                                                |
++-------------------------------------------------------------+
+| "products"                                                  |
++-------------------------------------------------------------+
+| "{category_id}"                                             |
++-------------------------------------------------------------+
+| ...                                                         |
++=============================================================+
+
++==================== HANDLER METADATA POOL ==================+
+| HandlerMeta #0 (JSON string)                                |
++-------------------------------------------------------------+
+| HandlerMeta #1 (JSON string)                                |
++-------------------------------------------------------------+
+| ...                                                         |
++=============================================================+
+
+```
