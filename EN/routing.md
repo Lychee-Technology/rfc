@@ -141,34 +141,53 @@ Examples of metadata:
 
 It’s up to control plane to decide what you include, but items are referenced by `handler_off`.
 
+### **2.6 Method + First Segment Index**
+To accelerate root matches (especially with many prefixes), include:
+
+```rust
+struct MethodPrefixIndexEntry {
+    method: u8;             // HTTP method
+    first_seg_off: u32;     // string pool offset for first segment
+    first_seg_len: u16;
+    node_off: u64;          // subtree start
+}
+```
+This table appears right after the handler pool and enables a direct HashMap mapping from `(method, first segment) → node_off`. This avoids scanning the root node’s child list for high-fan-out cases.
+
 
 ## **3. Route Lookup Procedure**
 
-Given a URL path like:
+Matching an input path `/categories/100/products/abc` involves:
 
-`/categories/100/products/abc`
+1. **Split path into segments**: `["categories", "100", "products", "abc"]`
+2. **Optional initial index lookup**:
+   * Lookup `(method, segments[0])` in hashmap built from MethodPrefixIndex
+   * If found, start at that node offset
+   * Otherwise proceed with root node
 
-1. **Split path into segments** by `/` to `["categories", "100", "products", "abc"]`
-
-2. **Start at root node** using `root_node_off`
-
-3. **Iterate Levels**
-
+3. **Traverse Radix Tree**:
     For each segment:
+   * Read current node’s children\_off
+   * Scan small child list:
+     * Try static match first
+     * Otherwise fall back to parameter child
+   * Update current node offset
 
-   * Read the child list at `children_off`
-   * Match static child by comparing `text_off/text_len`
-   * If none, then parameter child
-   * Record parameter value if `seg_type == parameter`
+4. **Final node**:
+   * Verify `handler_off` nonzero
+   * Read metadata from handler pool
 
-4. **Final Node**
+Radix Tree lookup time scales with **path length L**, not total route count N, even with 100,000 routes. Root fan-out may be large (~3000 prefixes), but scanning only at the first level costs little relative to full scan and can be eliminated with the prefix index optimization.
 
-    If `handler_off` is non-zero:
-   * Extract handler metadata
-   * Return matched handler and parameter map
+### **Time & Space Complexity**
 
-This lookup is **O(L)** where `L` is number of segments, independent of number of routes because of prefix compression. 
+| Operation       | Complexity                         |
+| --------------- | ---------------------------------- |
+| Lookup time     | O(L) where L = number of segments  |
+| Memory overhead | Compact tree with shared prefixes  |
+| Startup cost    | Single mmap + optional index build |
 
+Even at large scale (100k routes), traversal is proportional to path depth, typically low (e.g., `/a/b/c` has `L=3`).
 
 ## **4. Rust + mmap Integration**
 
@@ -293,7 +312,7 @@ It leverages:
 
 ##  **8. Appendix**
 
-### 8.1 Full File Layout
+### Appendix A - Full File Layout
 
 ```
 +======================== FILE HEADER ========================+
@@ -348,11 +367,331 @@ It leverages:
 +=============================================================+
 
 +==================== HANDLER METADATA POOL ==================+
+| method              // HTTP method                          |
+| first_seg_off       // string pool offset for first segment |
+| first_seg_len                                               |
+| node_off            // subtree start                        |
++-------------------------------------------------------------+
+| ...                                                         |
++=============================================================+
+
++============== Method+Prefix Index Region  ==================+
 | HandlerMeta #0 (JSON string)                                |
 +-------------------------------------------------------------+
 | HandlerMeta #1 (JSON string)                                |
 +-------------------------------------------------------------+
 | ...                                                         |
 +=============================================================+
+```
+
+
+## **Appendix B — Full Example of mmap File Layout with Method+First Segment Index**
+
+This appendix shows a concrete **memory-mapped Radix Tree file layout** including offsets, child lists, string pool, handler pool, and Method + First Segment Index. It builds on the example routes:
 
 ```
+GET /categories  
+POST /categories/search
+GET /categories/{cid}/products  
+GET /categories/{cid}/products/{pid}
+
+GET /domains  
+GET /domains/{domain_name}
+
+GET /users  
+GET /users/{user_id}
+```
+
+The structure is organized so that the data plane can mmap this file and perform lookups without deserialization, using offset arithmetic and memory view access. 
+
+### **B.1 Example mmap Layout (with illustrative offsets)**
+
+File Offset  
+```
+0x0000 ─── File Header  
+0x0040 ─── Method+FirstSegment Index Region  
+0x0140 ─── NodeRecord 0 (root)  
+0x0160 ─── NodeRecord 1 "/categories"  
+0x0180 ─── NodeRecord 2 "/categories/search"  
+0x01A0 ─── NodeRecord 3 "/categories/{cid}/products"  
+0x01C0 ─── NodeRecord 4 "/categories/{cid}/products/{pid}"  
+0x01E0 ─── NodeRecord 5 "/domains"  
+0x0200 ─── NodeRecord 6 "/domains/{domain_name}"  
+0x0220 ─── NodeRecord 7 "/users"  
+0x0240 ─── NodeRecord 8 "/users/{user_id}"  
+0x0260 ─── ChildList for Node 0  
+0x0280 ─── ChildList for Node 1  
+0x02A0 ─── ChildList for Node 3  
+0x02C0 ─── ChildList for Node 5  
+0x02E0 ─── ChildList for Node 7  
+0x0300 ─── String Pool  
+0x0400 ─── Handler Metadata Pool
+```
+All section offsets are absolute file offsets within the mmap region.
+
+
+### **B.2 File Header**
+
+```rust
+struct FileHeader {  
+    magic: [u8; 4];             // e.g. b"RTMI"  
+    version: u16;  
+    pad: u16;  
+    index_off: u64;             // 0x0040  
+    index_len: u32;             // number of index entries  
+    root_node_off: u64;         // 0x0140  
+    node_count: u32;            // 9  
+    string_pool_off: u64;       // 0x0300  
+    string_pool_len: u32;       // length of string pool  
+    handler_pool_off: u64;      // 0x0400  
+    handler_pool_len: u32;      // length of handler pool  
+}  
+```
+
+## **B.3 Method + First Segment Index**
+
+At offset **0x0040**, we encode a small index table:
+
+| Entry | Method | First Segment | StringPool Offset | node_off |
+| ----- | ------ | ------------- | ----------------- | -------- |
+| 0     | GET=1  | "categories"  | 0x0300            | 0x0160   |
+| 1     | GET=1  | "domains"     | 0x0312            | 0x01E0   |
+| 2     | GET=1  | "users"       | 0x0322            | 0x0220   |
+
+```rust
+struct MethodPrefixIndexEntry {  
+    method: u8;          // HTTP method enum  
+    first_seg_off: u32;  
+    first_seg_len: u16;  
+    _pad: u8;  
+    node_off: u64;  
+}
+```
+
+This index allows the data plane to build a lookup table such as:
+
+`HashMap<(method, &str), u64>`
+
+and skip scanning root’s children list for common first segments.
+
+
+## **B.4 Radix Tree Node Records**
+
+Each node is a Radix Tree node describing a prefix fragment.
+
+```rust
+struct NodeRecord {  
+    prefix_off: u32;  
+    prefix_len: u16;  
+    flags: u8;  
+    child_count: u8;  
+    children_off: u64;  
+    handler_off: u32;  
+}
+```
+
+Below are the nodes:
+
+### **NodeRecord 0 — root (0x0140)**
+
+```
+prefix_off = 0  
+prefix_len = 0  
+flags = 0  
+child_count = 3  
+children_off = 0x0260  
+handler_off = 0  
+```
+
+### **NodeRecord 1 — "/categories" (0x0160)**
+
+```
+prefix_off = 0x0300  
+prefix_len = 11    // "/categories"  
+flags = 1          // has handler  
+child_count = 2  
+children_off = 0x0280  
+handler_off = handler "/categories"  
+```
+
+### **NodeRecord 2 — "/categories/search" (0x0180)**
+
+```
+prefix_off = 0x0312  
+prefix_len = 4     // "/search"
+flags = 1         // handler
+child_count = 0  
+children_off = 0  
+handler_off = handler "/categories/search"  
+```
+
+### **NodeRecord 3 — "/categories/{cid}/products" (0x01A0)**
+
+```
+prefix_off = 0x031A        // "{cid}/products"  
+prefix_len = (len)  
+flags = 1                  // has handler  
+child_count = 1  
+children_off = 0x02A0  
+handler_off = handler "/categories/{cid}/products"  
+```
+
+### **NodeRecord 4 — "/categories/{cid}/products/{pid}" (0x01C0)**
+
+```
+prefix_off = 0x0332  // "{pid}"  
+prefix_len = (len)  
+flags = 1            // handler  
+child_count = 0  
+children_off = 0  
+handler_off = handler "/categories/{cid}/products/{pid}"  
+```
+
+### **NodeRecord 5 — "/domains" (0x01E0)**
+
+```
+prefix_off = 0x033A  
+prefix_len = 8     // "/domains"  
+flags = 1  
+child_count = 1  
+children_off = 0x02C0  
+handler_off = handler "/domains"  
+```
+
+### **NodeRecord 6 — "/domains/{domain_name}" (0x0200)**
+
+```
+prefix_off = 0x0342  
+prefix_len = (len)  
+flags = 1  
+child_count = 0  
+children_off = 0  
+handler_off = handler "/domains/{domain_name}"  
+```
+
+### **NodeRecord 7 — "/users" (0x0220)**
+
+```
+prefix_off = 0x034C  
+prefix_len = 6     // "/users"  
+flags = 1  
+child_count = 1  
+children_off = 0x02E0  
+handler_off = handler "/users"  
+```
+
+### **NodeRecord 8 — "/users/{user_id}" (0x0240)**
+
+```
+prefix_off = 0x0354  
+prefix_len = (len)  
+flags = 1  
+child_count = 0  
+children_off = 0  
+handler_off = handler "/users/{user_id}"  
+```
+
+## **B.5 Child Lists**
+
+Each child list begins with a count, followed by that many ChildEntrys:
+
+```rust
+struct ChildEntry {  
+    seg_type: u8;     // 0 static, 1 param  
+    text_off: u32;  
+    text_len: u16;  
+    node_off: u64;  
+}  
+```
+
+### **ChildList @0x0260 (root)**
+
+```
+count = 3  
+ChildEntry 0: static "/categories" → node_off 0x0160  
+ChildEntry 1: static "/domains"    → node_off 0x01E0  
+ChildEntry 2: static "/users"      → node_off 0x0220  
+```
+
+### **ChildList @0x0280 ("/categories")**
+
+```
+count = 2  
+ChildEntry 0: static "/search"  → node_off 0x0180  
+ChildEntry 1: param             → node_off 0x01A0  
+```
+
+### **ChildList @0x02A0 ("/categories/{cid}/products")**
+
+```
+count = 1  
+ChildEntry 0: param → node_off 0x01C0  
+```
+
+### **ChildList @0x02C0 ("/domains")**
+
+```
+count = 1  
+ChildEntry 0: param → node_off 0x0200
+```
+
+### **ChildList @0x02E0 ("/users")**
+
+```
+count = 1  
+ChildEntry 0: param → node_off 0x0240
+```
+
+## **B.6 String Pool (starting at 0x0300)**
+
+```
+0x0300: "/categories"
+0x0312: "/search"
+0x0318: "{cid}/products"
+0x0332: "{pid}"
+0x033A: "/domains"
+0x0342: "{domain_name}"
+0x034C: "/users"
+0x0354: "{user_id}"
+```
+
+Strings are nul-terminated and referenced by offset+length in node and child entries.
+
+## **B.7 Handler Metadata Pool (@0x0400)**
+
+Handler metadata records are application-specific; example offsets:
+
+```
+0x0400: handler "/categories"  
+0x0410: handler "/categories/search"         
+0x0420: handler "/categories/{cid}/products"  
+0x0430: handler "/categories/{cid}/products/{pid}"  
+0x0440: handler "/domains"  
+0x0450: handler "/domains/{domain_name}"  
+0x0460: handler "/users"  
+0x0470: handler "/users/{user_id}"
+```
+
+A handler record might contain an ID, permissions, flags, etc.
+
+
+## **B.8 How Matching Uses These Sections**
+
+At runtime:
+
+1. mmap entire file; OS loads pages lazily. 
+2. Read header, build a hashmap from **Method+Prefix index**.
+3. On request GET /categories/100/...:
+   * Look up (GET,"categories") → node_off 0x0160.
+   * From there scan child list 0x0280:
+     * Try "/search" → no match with "100"
+     * Fall to param → node_off 0x01A0
+   * Continue deeper nodes via child lists until handler found.
+
+
+## **B.9 Why This Layout Works Well**
+
+* **Direct mmap access avoids deserialization** — zero run-time parsing. 
+* **Radix Tree compresses prefixes** (/categories) so fewer nodes. 
+* **Method+Prefix index jumps directly** into top subtree in O(1) time.
+* Efficient storage of child lists and string pool promotes cache friendliness.
