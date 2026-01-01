@@ -367,18 +367,18 @@ It leverages:
 +=============================================================+
 
 +==================== HANDLER METADATA POOL ==================+
-| method              // HTTP method                          |
-| first_seg_off       // string pool offset for first segment |
-| first_seg_len                                               |
-| node_off            // subtree start                        |
+| HandlerMeta #0 (JSON string)                                |
++-------------------------------------------------------------+
+| HandlerMeta #1 (JSON string)                                |
 +-------------------------------------------------------------+
 | ...                                                         |
 +=============================================================+
 
 +============== Method+Prefix Index Region  ==================+
-| HandlerMeta #0 (JSON string)                                |
-+-------------------------------------------------------------+
-| HandlerMeta #1 (JSON string)                                |
+| method              // HTTP method                          |
+| first_seg_off       // string pool offset for first segment |
+| first_seg_len                                               |
+| node_off            // subtree start                        |
 +-------------------------------------------------------------+
 | ...                                                         |
 +=============================================================+
