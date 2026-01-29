@@ -4,11 +4,11 @@ This document defines the **complete Authentication, Authorization, and Accounti
 
 The architecture explicitly separates three concerns:
 
-| Layer                  | Responsibility                                   |
-| ---------------------- | ------------------------------------------------ |
-| **Authentication**     | Verify external identity via social login / SSO  |
-| **Identity Binding**   | Map external identity to internal LTBase user    |
-| **Authorization**      | Enforce row-level and column-level permissions   |
+| Layer                | Responsibility                                  |
+| -------------------- | ----------------------------------------------- |
+| **Authentication**   | Verify external identity via social login / SSO |
+| **Identity Binding** | Map external identity to internal LTBase user   |
+| **Authorization**    | Enforce row-level and column-level permissions  |
 
 This separation enables LTBase to support invitation-based onboarding, whitelists, external approval systems, and multi-tenant deployments — without weakening security or overloading JWTs.
 
@@ -70,8 +70,8 @@ Exchange a third-party identity token for an LTBase session token.
 
 **Request Headers:**
 
-| Header        | Required | Description                                                  |
-| ------------- | -------- | ------------------------------------------------------------ |
+| Header        | Required | Description                                                                            |
+| ------------- | -------- | -------------------------------------------------------------------------------------- |
 | Authorization | Yes      | `Bearer <id_token>` — JWT from identity provider (validated by API Gateway authorizer) |
 
 **Request Body:** None
@@ -92,12 +92,55 @@ Exchange a third-party identity token for an LTBase session token.
 
 **Error Responses:**
 
-| Status | Code                | Description                        |
-| ------ | ------------------- | ---------------------------------- |
-| 400    | INVALID_REQUEST     | Missing or malformed fields        |
-| 401    | INVALID_TOKEN       | Token verification failed          |
-| 403    | USER_NOT_REGISTERED | User not found in system           |
+| Status | Code                | Description                                         |
+| ------ | ------------------- | --------------------------------------------------- |
+| 400    | INVALID_REQUEST     | Missing or malformed fields                         |
+| 401    | INVALID_TOKEN       | Token verification failed                           |
 | 403    | IDENTITY_UNBOUND    | External identity not bound to user (see Section 3) |
+
+#### **POST /api/v1/id_bindings/{provider}**
+
+Bind a third-party identity token for an LTBase user.
+
+**Request Headers:**
+
+| Header        | Required | Description                                                                            |
+| ------------- | -------- | -------------------------------------------------------------------------------------- |
+| Authorization | Yes      | `Bearer <id_token>` — JWT from identity provider (validated by API Gateway authorizer) |
+
+**Request Body:** 
+
+```json
+{
+  "bind_context": {
+    "code": "ABC123",
+    "project_id": "project_456"
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+}
+```
+
+| Field         | Type   | Description                           |
+| ------------- | ------ | ------------------------------------- |
+| access_token  | string | LTBase signed JWT for API access      |
+| refresh_token | string | Token for obtaining new access tokens |
+
+**Error Responses:**
+
+| Status | Code            | Description                          |
+| ------ | --------------- | ------------------------------------ |
+| 400    | INVALID_REQUEST | Missing or malformed fields          |
+| 401    | INVALID_TOKEN   | Token verification failed            |
+| 409    | INVALID_CODE    | Code is invalid or it has been used. |
+
 
 ### **2.4 JWT Design**
 
@@ -173,11 +216,11 @@ CREATE TABLE identity.identity_binding (
 
 This design enables:
 
-| Capability                    | Description                                      |
-| ----------------------------- | ------------------------------------------------ |
-| Multi-tenant access           | One external identity → multiple tenants/workspaces |
-| Multiple identity providers   | One internal user → multiple external identities |
-| Lifecycle control             | Explicit status management (pending → active → revoked) |
+| Capability                  | Description                                             |
+| --------------------------- | ------------------------------------------------------- |
+| Multi-tenant access         | One external identity → multiple tenants/workspaces     |
+| Multiple identity providers | One internal user → multiple external identities        |
+| Lifecycle control           | Explicit status management (pending → active → revoked) |
 
 ### **3.4 Login & Binding Flow**
 
@@ -292,16 +335,16 @@ This dynamic attribute model requires authorization conditions that match attrib
 
 ### **5.2 Authorization Entities**
 
-| Entity                   | Purpose                         |
-| ------------------------ | ------------------------------- |
-| identity.user            | User identity (internal)        |
-| identity.external_identity | External provider identity    |
-| identity.identity_binding | External → Internal mapping    |
-| identity.role            | Role / group (with inheritance) |
-| identity.user_role       | User → Roles                    |
-| identity.permission      | Permission definition           |
-| identity.role_permission | Roles → Permissions             |
-| audit.log                | Audit/Accounting                |
+| Entity                     | Purpose                         |
+| -------------------------- | ------------------------------- |
+| identity.user              | User identity (internal)        |
+| identity.external_identity | External provider identity      |
+| identity.identity_binding  | External → Internal mapping     |
+| identity.role              | Role / group (with inheritance) |
+| identity.user_role         | User → Roles                    |
+| identity.permission        | Permission definition           |
+| identity.role_permission   | Roles → Permissions             |
+| audit.log                  | Audit/Accounting                |
 
 **Permissions are stored in structured tables**, not EAV. Tenant has no API to modify permissions. Only admin console or control plane APIs can modify permissions.
 
@@ -455,11 +498,11 @@ WHERE r.project_id = '{project_id}';
 
 **Benefits:**
 
-| Benefit | Description |
-| ------- | ----------- |
-| Tenant Isolation | Each project only sees its own data through dedicated views |
-| Simplified Queries | Application code queries views without filtering by `project_id` |
-| Permission Control | GRANT/REVOKE can be applied per-view to limit tenant access |
+| Benefit            | Description                                                           |
+| ------------------ | --------------------------------------------------------------------- |
+| Tenant Isolation   | Each project only sees its own data through dedicated views           |
+| Simplified Queries | Application code queries views without filtering by `project_id`      |
+| Permission Control | GRANT/REVOKE can be applied per-view to limit tenant access           |
 | Schema Consistency | Views expose the same columns (minus `project_id`) across all tenants |
 
 **Permission Example:**
@@ -493,12 +536,12 @@ Policy rules use the existing LTBase query rule format:
 }
 ```
 
-| Key | Meaning              |
-| --- | -------------------- |
+| Key | Meaning                     |
+| --- | --------------------------- |
 | l   | Logical operator (and / or) |
-| c   | Condition array      |
-| a   | Attribute name       |
-| v   | Value with operator prefix |
+| c   | Condition array             |
+| a   | Attribute name              |
+| v   | Value with operator prefix  |
 
 This format supports nested logic and serves both row-level and column-level conditions.
 
@@ -641,14 +684,14 @@ This ensures that agents *never generate policy conditions* but only request act
 
 All enforcement decisions are logged:
 
-| Field     | Purpose                        |
-| --------- | ------------------------------ |
-| timestamp | When check happened            |
-| user_id   | Who requested (internal user)  |
-| action    | Operation attempted            |
-| resource  | Entity type / ID               |
-| decision  | allowed / denied               |
-| details   | Rule matched, context values   |
+| Field     | Purpose                       |
+| --------- | ----------------------------- |
+| timestamp | When check happened           |
+| user_id   | Who requested (internal user) |
+| action    | Operation attempted           |
+| resource  | Entity type / ID              |
+| decision  | allowed / denied              |
+| details   | Rule matched, context values  |
 
 This supports compliance and incident investigation.
 
