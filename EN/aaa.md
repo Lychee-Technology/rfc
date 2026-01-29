@@ -411,44 +411,44 @@ Each project gets its own set of views that filter data to only that project. Vi
 -- Template: Views for project {project_id}
 
 -- User view
-CREATE VIEW identity.user_{project_id} AS
+CREATE VIEW identity.user_{project_id} WITH (security_barrier = true) AS
     SELECT user_id, username, email, created_at
     FROM identity.user
     WHERE project_id = '{project_id}';
 
 -- External Identity view
-CREATE VIEW identity.external_identity_{project_id} AS
+CREATE VIEW identity.external_identity_{project_id} WITH (security_barrier = true) AS
     SELECT ext_id, provider, provider_subject, email, raw_claims, created_at
     FROM identity.external_identity
     WHERE project_id = '{project_id}';
 
 -- Identity Binding view
-CREATE VIEW identity.identity_binding_{project_id} AS
+CREATE VIEW identity.identity_binding_{project_id} WITH (security_barrier = true) AS
     SELECT binding_id, tenant_id, workspace_id, ext_id, user_id, status, bind_context, created_at, activated_at
     FROM identity.identity_binding
 WHERE project_id = '{project_id}';
 
 -- Role view
-CREATE VIEW identity.role_{project_id} AS
+CREATE VIEW identity.role_{project_id} WITH (security_barrier = true) AS
     SELECT role_id, name, description, parent_role_id, created_at
     FROM identity.role
     WHERE project_id = '{project_id}';
 
 -- Permission view
-CREATE VIEW identity.permission_{project_id} AS
+CREATE VIEW identity.permission_{project_id} WITH (security_barrier = true) AS
     SELECT permission_id, name, rule_json, outcome, description, created_at
     FROM identity.permission
 WHERE project_id = '{project_id}';
 
 -- User-Role mapping view (joined through user)
-CREATE VIEW identity.user_role_{project_id} AS
+CREATE VIEW identity.user_role_{project_id} WITH (security_barrier = true) AS
     SELECT ur.user_id, ur.role_id, ur.assigned_at
     FROM identity.user_role ur
     JOIN identity.user u ON ur.user_id = u.user_id
     WHERE u.project_id = '{project_id}';
 
 -- Role-Permission mapping view (joined through role)
-CREATE VIEW identity.role_permission_{project_id} AS
+CREATE VIEW identity.role_permission_{project_id} WITH (security_barrier = true) AS
     SELECT rp.role_id, rp.permission_id
     FROM identity.role_permission rp
     JOIN identity.role r ON rp.role_id = r.role_id
