@@ -353,15 +353,13 @@ CREATE TABLE identity.external_identity (
 CREATE TABLE identity.identity_binding (
     binding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL,
-    tenant_id UUID NOT NULL,
-    workspace_id UUID NOT NULL,
     ext_id UUID REFERENCES identity.external_identity(ext_id),
     user_id UUID REFERENCES identity.user(user_id),
     status TEXT NOT NULL,
     bind_context JSONB,
     created_at BIGINT NOT NULL,
     activated_at BIGINT,
-    UNIQUE (project_id, tenant_id, workspace_id, ext_id)
+    UNIQUE (project_id, ext_id)
 );
 
 -- 4. Roles (and Groups)
@@ -424,7 +422,7 @@ CREATE VIEW identity.external_identity_{project_id} WITH (security_barrier = tru
 
 -- Identity Binding view
 CREATE VIEW identity.identity_binding_{project_id} WITH (security_barrier = true) AS
-    SELECT binding_id, tenant_id, workspace_id, ext_id, user_id, status, bind_context, created_at, activated_at
+    SELECT binding_id, ext_id, user_id, status, bind_context, created_at, activated_at
     FROM identity.identity_binding
 WHERE project_id = '{project_id}';
 
