@@ -74,7 +74,17 @@ Exchange a third-party identity token for an LTBase session token.
 | ------------- | -------- | -------------------------------------------------------------------------------------- |
 | Authorization | Yes      | `Bearer <id_token>` — JWT from identity provider (validated by API Gateway authorizer) |
 
-**Request Body:** None
+**Request Body:**
+
+```json
+{
+  "project_id": "accbd397-974e-47f2-9331-56e6c64e19ef"
+}
+```
+
+| Field      | Type   | Required | Description                          |
+| ---------- | ------ | -------- | ------------------------------------ |
+| project_id | string | Yes      | Target project ID for authentication |
 
 **Response (200 OK):**
 
