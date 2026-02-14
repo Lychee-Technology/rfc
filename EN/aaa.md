@@ -10,7 +10,7 @@ The architecture explicitly separates three concerns:
 | **Identity Binding** | Map external identity to internal LTBase user   |
 | **Authorization**    | Enforce row-level and column-level permissions  |
 
-This separation enables LTBase to support invitation-based onboarding, whitelists, external approval systems, and multi-tenant deployments — without weakening security or overloading JWTs.
+This separation enables LTBase to support invitation-based onboarding, whitelists, external approval systems, and multi-project deployments — without weakening security or overloading JWTs.
 
 ---
 
@@ -43,22 +43,15 @@ The authentication layer is responsible for:
 
 ### **2.2 External Identity Model**
 
-External identities are stored independently from LTBase internal users:
+External identity lookup is stored in a **shared DynamoDB table** (same table used by control plane), using project-scoped keys:
 
-```sql
-CREATE TABLE identity.external_identity (
-    ext_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    provider TEXT NOT NULL,              -- google, apple, etc
-    provider_subject TEXT NOT NULL,      -- external `sub`
-    email TEXT,
-    raw_claims JSONB,
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, provider, provider_subject)
-);
-```
+| Item Type | Key Pattern | Purpose |
+| --------- | ----------- | ------- |
+| External Identity Lookup | `PK: auth#project#{project_id}#ext#{provider_b64}#{issuer_b64}#{sub_b64}`<br>`SK: user` | Resolve external identity to internal user |
 
-This table represents **who the user is according to the external provider**, nothing more.
+Typical attributes include `user_id`, `provider`, `issuer`, `external_sub`, `email`, and `updated_at`.
+
+This item represents **who the user is according to the external provider**, and which internal user it is bound to.
 
 ### **2.3 API Definition**
 
@@ -91,7 +84,8 @@ Exchange a third-party identity token for an LTBase session token.
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "api_base_url": "https://api.example.com"
 }
 ```
 
@@ -99,14 +93,26 @@ Exchange a third-party identity token for an LTBase session token.
 | ------------- | ------ | ------------------------------------- |
 | access_token  | string | LTBase signed JWT for API access      |
 | refresh_token | string | Token for obtaining new access tokens |
+| expires_at    | number | Access token expiry (Unix seconds)    |
+| project_id    | string | Effective project ID                  |
+| api_base_url  | string | Project-scoped data plane base URL    |
 
 **Error Responses:**
 
-| Status | Code                | Description                                         |
-| ------ | ------------------- | --------------------------------------------------- |
-| 400    | INVALID_REQUEST     | Missing or malformed fields                         |
-| 401    | INVALID_TOKEN       | Token verification failed                           |
-| 403    | IDENTITY_UNBOUND    | External identity not bound to user (see Section 3) |
+| Status | `error` Value              | Description                                          |
+| ------ | -------------------------- | ---------------------------------------------------- |
+| 400    | `invalid_body`             | Malformed JSON body                                  |
+| 400    | `project_id_required`      | `project_id` missing in body and claims              |
+| 400    | `invalid_provider`         | Provider path parameter is invalid                   |
+| 400    | `missing_identity`         | Missing required identity claims (`sub`/`iss`)       |
+| 400    | `project_not_configured`   | No API base URL configured for the target project    |
+| 403    | `identity_unbound`         | External identity is not bound to an internal user   |
+| 500    | `user_lookup_failed`       | Failed to lookup user by external identity           |
+| 500    | `update_last_login_failed` | Failed to update user login timestamp                |
+| 500    | `role_list_failed`         | Failed to load direct user roles                     |
+| 500    | `role_expand_failed`       | Failed to expand inherited roles                     |
+| 500    | `permission_list_failed`   | Failed to load permissions from effective roles      |
+| 500    | `exchange_failed`          | Failed to issue access/refresh token pair            |
 
 #### **POST /api/v1/id_bindings/{provider}**
 
@@ -134,7 +140,8 @@ Bind a third-party identity token for an LTBase user.
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "api_base_url": "https://api.example.com"
 }
 ```
 
@@ -145,11 +152,15 @@ Bind a third-party identity token for an LTBase user.
 
 **Error Responses:**
 
-| Status | Code            | Description                          |
-| ------ | --------------- | ------------------------------------ |
-| 400    | INVALID_REQUEST | Missing or malformed fields          |
-| 401    | INVALID_TOKEN   | Token verification failed            |
-| 409    | INVALID_CODE    | Code is invalid or it has been used. |
+| Status | `error` Value         | Description                                       |
+| ------ | --------------------- | ------------------------------------------------- |
+| 400    | `invalid_body`        | Malformed JSON body                               |
+| 400    | `project_id_required` | `bind_context.project_id` is missing              |
+| 400    | `invalid_provider`    | Provider path parameter is invalid                |
+| 400    | `missing_identity`    | Missing required identity claims (`sub`/`iss`)    |
+| 400    | `invalid_code`        | `bind_context.code` is missing                    |
+| 409    | `invalid_code`        | Referral code invalid, expired, or already used   |
+| 500    | `id_binding_failed`   | Binding transaction or token issuance failed       |
 
 
 ### **2.4 JWT Design**
@@ -182,55 +193,37 @@ In enterprise environments:
 
 * Not every Google/Apple user is allowed to access the system
 * Access may depend on invitation codes, email domains, approvals, or external systems
-* One external identity may need access to multiple tenants/workspaces
+* One external identity may need access to multiple projects
 
 Therefore, LTBase introduces an explicit **Identity Binding** layer between authentication and authorization.
 
 ### **3.2 Internal User (Authorization Subject)**
 
-The internal LTBase user is the **only subject used by authorization policies**:
+The internal LTBase user is the **only subject used by authorization policies**.
 
-```sql
-CREATE TABLE identity.user (
-    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    username TEXT NOT NULL,
-    email TEXT,
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, username)
-);
-```
+User profile is stored as a DynamoDB item:
+
+| Item Type | Key Pattern | Core Attributes |
+| --------- | ----------- | --------------- |
+| User Profile | `PK: auth#project#{project_id}#user#{user_id}`<br>`SK: profile` | `user_id`, `project_id`, `email`, `email_verified`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub` |
 
 ### **3.3 Identity Binding Schema**
 
-```sql
-CREATE TABLE identity.identity_binding (
-    binding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
+LTBase authservice uses an **item-based binding model** instead of a dedicated `identity_binding` table:
 
-    tenant_id UUID NOT NULL,
-    workspace_id UUID NOT NULL,
-
-    ext_id UUID REFERENCES identity.external_identity(ext_id),
-    user_id UUID REFERENCES identity.user(user_id),
-
-    status TEXT NOT NULL,                -- pending | active | suspended | revoked
-    bind_context JSONB,                  -- invite code, approver, external IDs
-
-    created_at BIGINT NOT NULL,
-    activated_at BIGINT,
-
-    UNIQUE (project_id, tenant_id, workspace_id, ext_id)
-);
-```
+| Binding State | DynamoDB Representation |
+| ------------- | ----------------------- |
+| Unbound | No external lookup item for `(project_id, provider, issuer, sub)` |
+| Bound | External lookup item exists and points to a valid user profile |
+| Bound via code | Referral item validated + consumed in the same transaction that creates user/binding |
 
 This design enables:
 
 | Capability                  | Description                                             |
 | --------------------------- | ------------------------------------------------------- |
-| Multi-tenant access         | One external identity → multiple tenants/workspaces     |
+| Multi-project access        | One external identity → multiple projects               |
 | Multiple identity providers | One internal user → multiple external identities        |
-| Lifecycle control           | Explicit status management (pending → active → revoked) |
+| Lifecycle control           | Binding is controlled through item existence and conditional writes |
 
 ### **3.4 Login & Binding Flow**
 
@@ -238,46 +231,44 @@ This design enables:
 sequenceDiagram
     autonumber
     participant Client
-    participant LTBaseAPI
+    participant AuthService
     participant SocialProvider
-    participant BindingPolicyEngine
-    participant IdentityStore
+    participant DynamoDB
     participant AuthorizationEngine
 
-    Client->>LTBaseAPI: POST /login/social (id_token)
-    LTBaseAPI->>SocialProvider: Validate token
-    SocialProvider-->>LTBaseAPI: Claims
+    Client->>AuthService: POST /api/v1/login/{provider}
+    AuthService->>SocialProvider: Validate id_token
+    SocialProvider-->>AuthService: Claims (sub, iss, email)
 
-    LTBaseAPI->>IdentityStore: Resolve external_identity
+    AuthService->>DynamoDB: Get external lookup item
 
-    alt No Active Binding
-        LTBaseAPI-->>Client: UNBOUND (ext_identity_id)
-        Client->>LTBaseAPI: POST /identity/bind
-        LTBaseAPI->>BindingPolicyEngine: Evaluate binding policy
-        BindingPolicyEngine-->>LTBaseAPI: Result
-        alt Binding Allowed
-            LTBaseAPI->>IdentityStore: Activate binding
-        else Binding Denied
-            LTBaseAPI-->>Client: BIND_FAILED
-        end
+    alt Not bound
+        AuthService-->>Client: 403 IDENTITY_UNBOUND
+        Client->>AuthService: POST /api/v1/id_bindings/{provider} (code)
+        AuthService->>DynamoDB: Validate referral + create user + create external lookup (transaction)
     end
 
-    LTBaseAPI->>AuthorizationEngine: Resolve roles & permissions
-    LTBaseAPI-->>Client: LTBase JWT
+    AuthService->>AuthorizationEngine: Resolve roles & permissions
+    AuthService-->>Client: LTBase JWT pair
 ```
 
 **Flow Steps:**
 
 1. User logs in via social provider
 2. LTBase validates the external token
-3. LTBase resolves or creates `external_identity`
-4. LTBase checks for an **active identity binding**
-5. If bound → issue LTBase JWT
-6. If not bound → return `UNBOUND` response, client must request binding
+3. Authservice looks up external binding in DynamoDB
+4. If bound → resolve roles/permissions and issue JWT pair
+5. If not bound → return `IDENTITY_UNBOUND`
+6. Client calls bind endpoint with referral code to create binding atomically
 
 ### **3.5 Binding Policy Model**
 
 Binding policies reuse LTBase rule syntax and are evaluated at bind-time:
+
+> [!NOTE]
+> Current implementation (`v1`) uses referral-code validation as the binding gate.
+> The policy-driven model below is the target design.
+> Detailed implementation guidance is documented in `aaa-binding-policy-implementation.md`.
 
 **Invitation Code Policy:**
 
@@ -345,18 +336,21 @@ This dynamic attribute model requires authorization conditions that match attrib
 
 ### **5.2 Authorization Entities**
 
-| Entity                     | Purpose                         |
-| -------------------------- | ------------------------------- |
-| identity.user              | User identity (internal)        |
-| identity.external_identity | External provider identity      |
-| identity.identity_binding  | External → Internal mapping     |
-| identity.role              | Role / group (with inheritance) |
-| identity.user_role         | User → Roles                    |
-| identity.permission        | Permission definition           |
-| identity.role_permission   | Roles → Permissions             |
-| audit.log                  | Audit/Accounting                |
+| Item Family | Purpose |
+| ----------- | ------- |
+| `user profile` | Internal user identity subject |
+| `external lookup` | Resolve `(project, provider, issuer, sub)` to `user_id` |
+| `email lookup` | Resolve verified email to `user_id` |
+| `user role` | User → role mapping |
+| `role profile` | Role metadata and parent role (inheritance) |
+| `role permission` | Role → permission mapping |
+| `permission profile` | Permission definition (`name`, `rule_json`, `outcome`) |
+| `refresh session` | Refresh token lifecycle (issued/rotated/revoked) |
+| `session parent-child edge` | Revoke-chain traversal |
+| `referral profile` | Invite/referral validation and consume state |
+| `audit event` | Accounting and security audit trail |
 
-**Permissions are stored in structured tables**, not EAV. Tenant has no API to modify permissions. Only admin console or control plane APIs can modify permissions.
+Permissions remain structured objects, not EAV records. Project-scoped client calls still cannot mutate permission definitions directly.
 
 ### **5.3 Entity Relationships**
 
@@ -370,159 +364,61 @@ The system follows a standard **RBAC (Role-Based Access Control)** model with su
 
 **Relationship Flow:**
 
-1. **External Identity** is bound to **Internal User** (via `identity.identity_binding`)
-2. **Users** are assigned **Roles** (Many-to-Many via `identity.user_role`)
-3. **Roles** are mapped to **Permissions** (Many-to-Many via `identity.role_permission`)
+1. **External Identity** is bound to **Internal User** (via `external lookup` item)
+2. **Users** are assigned **Roles** (via `user role` items)
+3. **Roles** are mapped to **Permissions** (via `role permission` items)
 4. **Permissions** define the actual policies
 
-### **5.4 SQL Definitions**
+### **5.4 DynamoDB Single-Table Key Definitions**
 
-```sql
-CREATE SCHEMA identity;
+Identity records are stored in the shared physical table with project-scoped key namespaces:
 
--- 1. Users (Internal)
-CREATE TABLE identity.user (
-    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    username TEXT NOT NULL,
-    email TEXT,
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, username)
-);
+| Domain | `PK` Pattern | `SK` Pattern | Notes |
+| ------ | ------------ | ------------ | ----- |
+| User profile | `auth#project#{project_id}#user#{user_id}` | `profile` | Internal user principal |
+| External identity lookup | `auth#project#{project_id}#ext#{provider_b64}#{issuer_b64}#{sub_b64}` | `user` | Identity binding lookup |
+| Verified email lookup | `auth#project#{project_id}#email#{email_lower_b64}` | `user` | Optional/conditional |
+| User-role mapping | `auth#project#{project_id}#user#{user_id}` | `role#{role_id}` | Query roles by user |
+| Role profile | `auth#project#{project_id}#role#{role_id}` | `profile` | Includes parent role |
+| Role-permission mapping | `auth#project#{project_id}#role#{role_id}` | `permission#{permission_id}` | Query permissions by role |
+| Permission profile | `auth#project#{project_id}#permission#{permission_id}` | `profile` | Permission payload |
+| Binding policy | `auth#project#{project_id}#binding_policy` | `profile#{policy_id}` | Query-enabled policy loading |
+| Refresh session | `auth#project#{project_id}#session#{refresh_jti}` | `profile` | Rotation/revocation state |
+| Session edge | `auth#project#{project_id}#session_parent#{parent_jti}` | `child#{refresh_jti}` | Revoke-chain traversal |
+| Referral | `auth#project#{project_id}#ref#{code_b64}` | `profile` | Invite validation/consumption |
+| Audit event | `auth#project#{project_id}#audit` | `ts#{unix_ms}#{rand}` | Time-ordered append log |
 
--- 2. External Identities
-CREATE TABLE identity.external_identity (
-    ext_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    provider TEXT NOT NULL,
-    provider_subject TEXT NOT NULL,
-    email TEXT,
-    raw_claims JSONB,
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, provider, provider_subject)
-);
+### **5.5 Project Isolation Strategy (No SQL Views)**
 
--- 3. Identity Binding
-CREATE TABLE identity.identity_binding (
-    binding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    ext_id UUID REFERENCES identity.external_identity(ext_id),
-    user_id UUID REFERENCES identity.user(user_id),
-    status TEXT NOT NULL,
-    bind_context JSONB,
-    created_at BIGINT NOT NULL,
-    activated_at BIGINT,
-    UNIQUE (project_id, ext_id)
-);
+Project isolation is implemented by **key scoping**, not SQL views:
 
--- 4. Roles (and Groups)
-CREATE TABLE identity.role (
-    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    parent_role_id UUID REFERENCES identity.role(role_id),
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, name)
-);
+| Isolation Control | Description |
+| ----------------- | ----------- |
+| Key namespace | Every auth item is prefixed with `auth#project#{project_id}` |
+| Lookup discipline | All authservice reads/writes include project-scoped keys |
+| Conditional writes | Binding/session operations use conditional or transactional writes for safety |
 
--- 5. Permissions
-CREATE TABLE identity.permission (
-    permission_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL,
-    name TEXT NOT NULL,
-    rule_json JSONB NOT NULL,
-    outcome TEXT NOT NULL,
-    description TEXT,
-    created_at BIGINT NOT NULL,
-    UNIQUE (project_id, name)
-);
+This design removes dynamic SQL view provisioning and keeps authservice storage serverless-native.
 
--- 6. User -> Role Mapping
-CREATE TABLE identity.user_role (
-    user_id UUID REFERENCES identity.user(user_id),
-    role_id UUID REFERENCES identity.role(role_id),
-    assigned_at BIGINT NOT NULL,
-    PRIMARY KEY (user_id, role_id)
-);
+### **5.6 Key Normalization and Encoding Rules**
 
--- 7. Role -> Permission Mapping
-CREATE TABLE identity.role_permission (
-    role_id UUID REFERENCES identity.role(role_id),
-    permission_id UUID REFERENCES identity.permission(permission_id),
-    PRIMARY KEY (role_id, permission_id)
-);
-```
+To avoid key collisions and cross-language inconsistencies, key segments must be normalized deterministically:
 
-### **5.5 Per-Project Views**
+| Segment | Rule |
+| ------- | ---- |
+| `project_id` | Use canonical UUID string form (lowercase, hyphenated). |
+| `provider` | Trim spaces, lowercase, then encode with Base64 URL-safe (no padding). |
+| `issuer` | Trim spaces, keep original case, encode with Base64 URL-safe (no padding). |
+| `sub` | Trim spaces, encode with Base64 URL-safe (no padding). |
+| `email_lower` | Trim spaces, lowercase, then encode with Base64 URL-safe (no padding). |
+| `code` | Trim spaces, encode with Base64 URL-safe (no padding). |
 
-Each project gets its own set of views that filter data to only that project. Views are created dynamically when a project is provisioned, using the naming convention `<table_name>_<project_id>`:
+General rules:
 
-```sql
--- Template: Views for project {project_id}
-
--- User view
-CREATE VIEW identity.user_{project_id} WITH (security_barrier = true) AS
-    SELECT user_id, username, email, created_at
-    FROM identity.user
-    WHERE project_id = '{project_id}';
-
--- External Identity view
-CREATE VIEW identity.external_identity_{project_id} WITH (security_barrier = true) AS
-    SELECT ext_id, provider, provider_subject, email, raw_claims, created_at
-    FROM identity.external_identity
-    WHERE project_id = '{project_id}';
-
--- Identity Binding view
-CREATE VIEW identity.identity_binding_{project_id} WITH (security_barrier = true) AS
-    SELECT binding_id, ext_id, user_id, status, bind_context, created_at, activated_at
-    FROM identity.identity_binding
-WHERE project_id = '{project_id}';
-
--- Role view
-CREATE VIEW identity.role_{project_id} WITH (security_barrier = true) AS
-    SELECT role_id, name, description, parent_role_id, created_at
-    FROM identity.role
-    WHERE project_id = '{project_id}';
-
--- Permission view
-CREATE VIEW identity.permission_{project_id} WITH (security_barrier = true) AS
-    SELECT permission_id, name, rule_json, outcome, description, created_at
-    FROM identity.permission
-WHERE project_id = '{project_id}';
-
--- User-Role mapping view (joined through user)
-CREATE VIEW identity.user_role_{project_id} WITH (security_barrier = true) AS
-    SELECT ur.user_id, ur.role_id, ur.assigned_at
-    FROM identity.user_role ur
-    JOIN identity.user u ON ur.user_id = u.user_id
-    WHERE u.project_id = '{project_id}';
-
--- Role-Permission mapping view (joined through role)
-CREATE VIEW identity.role_permission_{project_id} WITH (security_barrier = true) AS
-    SELECT rp.role_id, rp.permission_id
-    FROM identity.role_permission rp
-    JOIN identity.role r ON rp.role_id = r.role_id
-WHERE r.project_id = '{project_id}';
-```
-
-**Benefits:**
-
-| Benefit            | Description                                                           |
-| ------------------ | --------------------------------------------------------------------- |
-| Tenant Isolation   | Each project only sees its own data through dedicated views           |
-| Simplified Queries | Application code queries views without filtering by `project_id`      |
-| Permission Control | GRANT/REVOKE can be applied per-view to limit tenant access           |
-| Schema Consistency | Views expose the same columns (minus `project_id`) across all tenants |
-
-**Permission Example:**
-
-```sql
--- Grant read-only access to a specific project's views
-GRANT SELECT ON identity.user_{project_id} TO project_reader_role;
-GRANT SELECT ON identity.role_{project_id} TO project_reader_role;
-GRANT SELECT ON identity.permission_{project_id} TO project_reader_role;
-```
+* All dynamic key segments are UTF-8 strings.
+* Do not use raw delimiters (`#`) inside key segments; always encode dynamic segments.
+* The same normalization pipeline must be shared by read and write paths.
+* Any invalid or empty normalized segment must fail fast at repository boundary.
 
 ---
 
@@ -597,7 +493,7 @@ Use cases:
 }
 ```
 
-The `outcome` for this permission would be stored as `'allow_column'` in the `identity.permission` table.
+The `outcome` for this permission would be stored as `'allow_column'` in the permission profile item.
 
 ### **Data Masking (Optional)**
 
@@ -621,12 +517,19 @@ The engine must expand inherited roles before evaluating permissions.
 
 Fetch permissions associated with all effective roles:
 
-```sql
-SELECT p.*
-FROM identity.permission p
-JOIN identity.role_permission rp ON p.permission_id = rp.permission_id
-WHERE rp.role_id IN (:role_ids)
+```text
+1) Query each role partition:
+   PK: auth#project#{project_id}#role#{role_id}
+   SK begins_with "permission#"
+
+2) Collect unique permission_id values.
+
+3) Get each permission profile:
+   PK: auth#project#{project_id}#permission#{permission_id}
+   SK: profile
 ```
+
+At runtime, this is implemented with DynamoDB `Query` + `GetItem`/batch read patterns, then de-duplicated in memory.
 
 ### **9.3 Context Expansion**
 
@@ -702,6 +605,11 @@ All enforcement decisions are logged:
 | resource  | Entity type / ID              |
 | decision  | allowed / denied              |
 | details   | Rule matched, context values  |
+
+Audit events are appended as DynamoDB items under:
+
+* `PK: auth#project#{project_id}#audit`
+* `SK: ts#{unix_ms}#{rand}`
 
 This supports compliance and incident investigation.
 
