@@ -15,6 +15,7 @@ The goal is not stylistic perfection. The goal is to find defects, maintenance r
 - SOLID Go Design (Dave Cheney): https://dave.cheney.net/2016/08/20/solid-go-design
 - Effective Go (community checklist): https://github.com/pthethanh/effective-go
 - Twelve Go Best Practices (slides): https://go.dev/talks/2013/bestpractices.slide
+- Go Fix (modernization): https://go.dev/blog/gofix
 
 ---
 
@@ -117,6 +118,7 @@ Use this checklist as hard gates.
 ### 3.9 Tooling gates (review-level checks)
 - Verify codebase expectations for `gofmt`/`goimports`.
 - Verify `go vet` findings are addressed or justified.
+- Verify `go fix` has been run for the target Go version to adopt available modernizations (see 3.11).
 
 ### 3.10 Coupling/Cohesion and Import Graph (SOLID Go)
 - Use objective design language in findings: `rigid`, `fragile`, `immobile`, `complex`, `verbose`.
@@ -125,7 +127,24 @@ Use this checklist as hard gates.
 - Prefer a wide, relatively flat, acyclic import graph over tall/narrow dependency stacks.
 - Push concrete wiring/details upward (typically to `main` or top-level handlers); keep lower layers dependency-light and interface-oriented.
 
-### 3.11 Dependency selection
+### 3.11 Modernization and `go fix`
+- Prefer modern language and library features over legacy manual patterns:
+  - `any` over `interface{}`.
+  - `min`/`max` built-ins (Go 1.21+) over if/else clamping patterns.
+  - `range`-over-int (Go 1.22+) over 3-clause `for i := 0; i < n; i++` loops when the index is unused or only used as a counter.
+  - `strings.Cut` / `bytes.Cut` (Go 1.18+) over `strings.Index` + manual slicing.
+  - `fmt.Appendf` over `[]byte(fmt.Sprintf(...))`.
+  - `slices` and `maps` package functions (e.g., `slices.Clone`, `maps.Keys`) over hand-written loops for common collection operations.
+  - `strings.Builder` over string concatenation in loops (repeated `+=` on strings is O(n²) and a potential DoS vector).
+  - `new(expr)` (Go 1.26+) over pointer-returning helper functions (`newInt`, `proto.String`, etc.).
+  - Remove redundant loop variable re-declarations (`x := x` inside `range` loops) that were necessary before Go 1.22.
+- Use `go fix ./...` as a routine step when upgrading to a newer Go toolchain; review the diff with `go fix -diff ./...`.
+- Run `go fix` more than once to capture synergistic fixes (one modernization may enable another).
+- For projects with platform-specific files, run `go fix` with multiple `GOOS`/`GOARCH` combinations for full coverage.
+- Be cautious of subtle semantic differences when applying modernizations (e.g., `slices.Clone` returns `nil` for empty slices whereas `append([]T{}, s...)` returns an empty non-nil slice).
+- Encourage writing custom analyzers for project-specific APIs to detect misuse and enforce internal conventions (self-service analysis).
+
+### 3.12 Dependency selection
 - Prefer the Go standard library whenever it provides adequate functionality.
 - When the standard library is insufficient, prefer `golang.org/x/...` packages (the official [X repositories](https://go.dev/wiki/X-Repositories)), which are maintained by the Go team under near-stdlib quality standards.
 - Next, prefer Google-maintained third-party libraries (`github.com/google/*`).
@@ -265,6 +284,9 @@ Use these quick detectors:
 19. Import graph appears tall/narrow; low-level packages pull many concrete dependencies.
 20. Lower-layer package knows runtime wiring details that should live in top-level composition code.
 21. Third-party dependency used where stdlib, `golang.org/x/...`, or a Google-maintained library (`github.com/google/*`) provides equivalent functionality.
+22. Manual pattern (if/else clamp, `Index`+slice, string concatenation in loop) where a modern stdlib function or built-in exists (`min`/`max`, `strings.Cut`, `strings.Builder`, `slices`/`maps` package functions).
+23. Pointer-returning helper function (`newInt`, `newString`, `proto.String`) that is replaceable by `new(expr)` (Go 1.26+).
+24. Quadratic string building via repeated `+=` in a loop instead of `strings.Builder`; potential DoS vector.
 
 ---
 
@@ -351,6 +373,7 @@ Focus especially on:
 - import graph quality (acyclic, wide/flat) and concrete dependency placement
 - embedding misuse as pseudo-inheritance
 - dependency selection: prefer stdlib > `golang.org/x/` > `github.com/google/*` > mature third-party (large-org backed)
+- legacy patterns replaceable by modern Go features (min/max, strings.Cut, range-over-int, slices/maps, new(expr), strings.Builder)
 ```
 
 ---
@@ -392,3 +415,5 @@ Run these questions explicitly during review:
 12. Does the import graph trend toward wide/flat decoupling, or tall/narrow dependency chains?
 13. Should this concrete dependency be pushed up to `main` and replaced by a narrow interface here?
 14. Could this third-party dependency be replaced by stdlib, `golang.org/x/...`, or a Google-maintained library?
+15. Are there manual patterns that could be replaced by modern Go built-ins or stdlib functions (`min`/`max`, `strings.Cut`, `slices`/`maps`, `new(expr)`, `strings.Builder`)?
+16. Has `go fix` been run against the current Go version to capture automated modernizations?
