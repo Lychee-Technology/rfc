@@ -43,15 +43,21 @@ The authentication layer is responsible for:
 
 ### **2.2 External Identity Model**
 
-External identity lookup is stored in a **shared DynamoDB table** (same table used by control plane), using project-scoped keys:
+Current implementation resolves external identity by deriving a **deterministic internal `user_id`** from normalized identity tuple:
+
+* `project_id`
+* `provider`
+* `issuer`
+* `sub`
+
+Login does not require querying a dedicated external-lookup item.  
+Instead, authservice computes deterministic `user_id` and reads:
 
 | Item Type | Key Pattern | Purpose |
 | --------- | ----------- | ------- |
-| External Identity Lookup | `PK: auth#project#{project_id}#ext#{provider_b64}#{issuer_b64}#{sub_b64}`<br>`SK: user` | Resolve external identity to internal user |
+| User Profile | `PK: auth#project#{project_id}#user#{user_id}`<br>`SK: profile` | Resolve whether identity is already bound |
 
-Typical attributes include `user_id`, `provider`, `issuer`, `external_sub`, `email`, and `updated_at`.
-
-This item represents **who the user is according to the external provider**, and which internal user it is bound to.
+The user profile remains the source of truth for binding state in the current path.
 
 ### **2.3 API Definition**
 
@@ -93,8 +99,6 @@ Exchange a third-party identity token for an LTBase session token.
 | ------------- | ------ | ------------------------------------- |
 | access_token  | string | LTBase signed JWT for API access      |
 | refresh_token | string | Token for obtaining new access tokens |
-| expires_at    | number | Access token expiry (Unix seconds)    |
-| project_id    | string | Effective project ID                  |
 | api_base_url  | string | Project-scoped data plane base URL    |
 
 **Error Responses:**
@@ -213,16 +217,16 @@ LTBase authservice uses an **item-based binding model** instead of a dedicated `
 
 | Binding State | DynamoDB Representation |
 | ------------- | ----------------------- |
-| Unbound | No external lookup item for `(project_id, provider, issuer, sub)` |
-| Bound | External lookup item exists and points to a valid user profile |
-| Bound via code | Referral item validated + consumed in the same transaction that creates user/binding |
+| Unbound | No user profile item at deterministic `user_id` |
+| Bound | User profile item exists at `auth#project#{project_id}#user#{user_id}` |
+| Bound via code | Referral item validated + consumed in the same transaction that creates user profile (optional email lookup may also be written) |
 
 This design enables:
 
 | Capability                  | Description                                             |
 | --------------------------- | ------------------------------------------------------- |
 | Multi-project access        | One external identity → multiple projects               |
-| Multiple identity providers | One internal user → multiple external identities        |
+| Deterministic binding state | Binding state is resolved through deterministic user key |
 | Lifecycle control           | Binding is controlled through item existence and conditional writes |
 
 ### **3.4 Login & Binding Flow**
@@ -240,12 +244,14 @@ sequenceDiagram
     AuthService->>SocialProvider: Validate id_token
     SocialProvider-->>AuthService: Claims (sub, iss, email)
 
-    AuthService->>DynamoDB: Get external lookup item
+    AuthService->>AuthService: Normalize identity + derive deterministic user_id
+    AuthService->>DynamoDB: Get user profile item by user_id
 
     alt Not bound
         AuthService-->>Client: 403 IDENTITY_UNBOUND
         Client->>AuthService: POST /api/v1/id_bindings/{provider} (code)
-        AuthService->>DynamoDB: Validate referral + create user + create external lookup (transaction)
+        AuthService->>DynamoDB: Validate referral + create user profile (transaction)
+        AuthService->>DynamoDB: Optional email lookup write
     end
 
     AuthService->>AuthorizationEngine: Resolve roles & permissions
@@ -256,10 +262,11 @@ sequenceDiagram
 
 1. User logs in via social provider
 2. LTBase validates the external token
-3. Authservice looks up external binding in DynamoDB
-4. If bound → resolve roles/permissions and issue JWT pair
-5. If not bound → return `IDENTITY_UNBOUND`
-6. Client calls bind endpoint with referral code to create binding atomically
+3. Authservice normalizes identity tuple and derives deterministic internal `user_id`
+4. Authservice reads user profile by deterministic `user_id`
+5. If bound → resolve roles/permissions and issue JWT pair
+6. If not bound → return `IDENTITY_UNBOUND`
+7. Client calls bind endpoint with referral code to create binding atomically
 
 ### **3.5 Binding Policy Model**
 
@@ -312,11 +319,32 @@ The authorization engine must ensure:
 
 * A user only sees rows they are permitted to see (**row-level restriction**)
 * A user only sees columns/attributes they are allowed to (**column/attribute-level**)
+* Runtime policy is **fail-closed** when policy resolution/evaluation fails
 * Permission rules can reference dynamic entity attributes in EAV
 * Rules are safe and structured (no code injection)
 
 > [!IMPORTANT]
 > **Row access ≠ Column visibility** — both are distinct control layers for data governance and compliance.
+
+### **4.1 Current Runtime Baseline (Implemented)**
+
+The current data-plane enforcement path is IAM-style and DynamoDB-backed:
+
+* Principal = requester `sub` + `role_ids` from JWT claims
+* Lookup `resource_grant` records under principal partition
+* Enforce operation (`create/read/update/delete`) using `ops`
+* Apply either:
+  * explicit `resource_id` grants, or
+  * `filter_json` grants converted to Forma conditions
+* Reject by default when no matching grants are found (fail-closed)
+
+### **4.2 Integrated Direction (Next Layer)**
+
+On top of resource grants, LTBase introduces richer permission semantics:
+
+* `permission_profile.rule_json` for structured rule logic
+* `permission_profile.outcome` for row/column action semantics (`allow_row`, `allow_column`, `mask_column`, etc.)
+* context expansion (`${requester.user_id}`, `${requester.role_ids}`) performed server-side only
 
 ---
 
@@ -339,12 +367,15 @@ This dynamic attribute model requires authorization conditions that match attrib
 | Item Family | Purpose |
 | ----------- | ------- |
 | `user profile` | Internal user identity subject |
-| `external lookup` | Resolve `(project, provider, issuer, sub)` to `user_id` |
 | `email lookup` | Resolve verified email to `user_id` |
 | `user role` | User → role mapping |
 | `role profile` | Role metadata and parent role (inheritance) |
 | `role permission` | Role → permission mapping |
 | `permission profile` | Permission definition (`name`, `rule_json`, `outcome`) |
+| `policy profile` | IAM-style policy document (`policy_document`) |
+| `principal policy attachment` | Attach policy to principal (user/role) |
+| `resource grant` | Principal-scoped resource operation grant (`ops`, `resource_id`/`filter_json`) |
+| `resource grant reverse` | Reverse index for resource-centric inspection |
 | `refresh session` | Refresh token lifecycle (issued/rotated/revoked) |
 | `session parent-child edge` | Revoke-chain traversal |
 | `referral profile` | Invite/referral validation and consume state |
@@ -364,10 +395,11 @@ The system follows a standard **RBAC (Role-Based Access Control)** model with su
 
 **Relationship Flow:**
 
-1. **External Identity** is bound to **Internal User** (via `external lookup` item)
+1. **External Identity** is normalized to deterministic internal `user_id`, then mapped to **User Profile**
 2. **Users** are assigned **Roles** (via `user role` items)
-3. **Roles** are mapped to **Permissions** (via `role permission` items)
-4. **Permissions** define the actual policies
+3. **Roles** may be mapped to **Permissions** (via `role permission` items)
+4. **Principals** may also receive direct IAM-style grants (`resource_grant`) and policy attachments
+5. **Authorization** combines grant-based scope with permission profile semantics
 
 ### **5.4 DynamoDB Single-Table Key Definitions**
 
@@ -376,12 +408,15 @@ Identity records are stored in the shared physical table with project-scoped key
 | Domain | `PK` Pattern | `SK` Pattern | Notes |
 | ------ | ------------ | ------------ | ----- |
 | User profile | `auth#project#{project_id}#user#{user_id}` | `profile` | Internal user principal |
-| External identity lookup | `auth#project#{project_id}#ext#{provider_b64}#{issuer_b64}#{sub_b64}` | `user` | Identity binding lookup |
 | Verified email lookup | `auth#project#{project_id}#email#{email_lower_b64}` | `user` | Optional/conditional |
 | User-role mapping | `auth#project#{project_id}#user#{user_id}` | `role#{role_id}` | Query roles by user |
 | Role profile | `auth#project#{project_id}#role#{role_id}` | `profile` | Includes parent role |
 | Role-permission mapping | `auth#project#{project_id}#role#{role_id}` | `permission#{permission_id}` | Query permissions by role |
 | Permission profile | `auth#project#{project_id}#permission#{permission_id}` | `profile` | Permission payload |
+| Policy profile | `auth#project#{project_id}#policy#{policy_id}` | `profile` | IAM-style policy document |
+| Principal policy attachment | `auth#project#{project_id}#principal#{type}#{id}` | `policy#{policy_id}` | Attach policy to user/role principal |
+| Resource grant | `auth#project#{project_id}#principal#{type}#{id}` | `grant#{schema}#{resource_or_filter}` | Operation-level grant with selector |
+| Resource grant reverse | `auth#project#{project_id}#resource#{schema}#{resource_or_filter}` | `principal#{type}#{id}` | Reverse lookup for governance/debug |
 | Binding policy | `auth#project#{project_id}#binding_policy` | `profile#{policy_id}` | Query-enabled policy loading |
 | Refresh session | `auth#project#{project_id}#session#{refresh_jti}` | `profile` | Rotation/revocation state |
 | Session edge | `auth#project#{project_id}#session_parent#{parent_jti}` | `child#{refresh_jti}` | Revoke-chain traversal |
@@ -424,7 +459,14 @@ General rules:
 
 ## **6. Permission Rule Syntax**
 
-Policy rules use the existing LTBase query rule format:
+LTBase currently uses two structured policy payloads:
+
+1. **Permission Rule JSON (`rule_json`)** for permission profiles
+2. **Grant Filter JSON (`filter_json`)** for resource grants
+
+### **6.1 Permission Rule JSON (`l/c/a/v`)**
+
+Permission rules reuse the LTBase query-rule format:
 
 ```json
 {
@@ -451,11 +493,29 @@ Policy rules use the existing LTBase query rule format:
 
 This format supports nested logic and serves both row-level and column-level conditions.
 
+### **6.2 Grant Filter JSON (`filter_json`)**
+
+For grant-based row scoping, filters are stored as:
+
+```json
+{
+  "ownerUserId": "eq:${requester.user_id}",
+  "status": "eq:open"
+}
+```
+
+Each key is an attribute name; each value is an operator-prefixed expression supported by the data-plane filter parser.
+
 ---
 
 ## **7. Row-Level Permission**
 
 A row-level rule determines whether a given entity (row) is visible or actionable.
+
+Current enforcement combines:
+
+* `resource_id` grants (explicit allow-list)
+* `filter_json` grants (attribute condition scope)
 
 **Example — User can read only rows they own:**
 
@@ -468,7 +528,7 @@ A row-level rule determines whether a given entity (row) is visible or actionabl
 }
 ```
 
-Row-level access control restricts visibility to specific dataset rows based on attributes or roles.
+At runtime, list/read operations are constrained by grant-derived conditions before querying business data.
 
 ---
 
@@ -493,7 +553,11 @@ Use cases:
 }
 ```
 
-The `outcome` for this permission would be stored as `'allow_column'` in the permission profile item.
+The `outcome` for this permission is stored in permission profile items (for example `'allow_column'`, `'mask_column'`).
+
+> [!NOTE]
+> Current implementation baseline mainly enforces row-level scope.  
+> Column-level policy outcomes are part of the integrated design and are introduced incrementally.
 
 ### **Data Masking (Optional)**
 
@@ -513,7 +577,25 @@ All_Employees → Dev → Team_Android
 
 The engine must expand inherited roles before evaluating permissions.
 
-### **9.2 Permission Fetch**
+> [!NOTE]
+> Current implementation resolves effective roles from both JWT `role_ids` and DynamoDB `user_role_attachment`,
+> then expands `parent_role_ids` transitively from role profiles (fail-closed on data access errors).
+
+### **9.2 Principal Scope Fetch (Current Baseline)**
+
+Fetch principal grants directly from DynamoDB:
+
+```text
+PK: auth#project#{project_id}#principal#{principal_type}#{principal_id}
+SK begins_with "grant#{schema_name}#"
+```
+
+Then evaluate:
+
+* operation compatibility via `ops`
+* selector via `resource_id` or `filter_json`
+
+### **9.3 Permission Fetch (Integrated Layer)**
 
 Fetch permissions associated with all effective roles:
 
@@ -531,7 +613,7 @@ Fetch permissions associated with all effective roles:
 
 At runtime, this is implemented with DynamoDB `Query` + `GetItem`/batch read patterns, then de-duplicated in memory.
 
-### **9.3 Context Expansion**
+### **9.4 Context Expansion**
 
 Before evaluating a rule, the engine replaces placeholders:
 
@@ -540,7 +622,7 @@ Before evaluating a rule, the engine replaces placeholders:
 
 with real values.
 
-### **9.4 Condition Evaluation**
+### **9.5 Condition Evaluation**
 
 The rule logic (l/c) is evaluated against:
 
@@ -555,11 +637,15 @@ The rule logic (l/c) is evaluated against:
 
 evaluates whether the requester's roles include the team of the project.
 
+Unresolved placeholders or invalid policy expressions must fail closed.
+
 ---
 
 ## **10. Query Filtering & Enforcement**
 
-To enforce permissions on list queries, use the **CTE (Common Table Expression)** pattern:
+Current data-plane enforcement pushes grant-derived conditions into Forma query conditions.
+
+For SQL-native paths, equivalent enforcement can be implemented using CTE (Common Table Expression) pattern:
 
 ```sql
 WITH matched_entities AS (
@@ -576,7 +662,7 @@ FROM public.entity_main t
 JOIN matched_entities m ON t.ltbase_row_id = m.row_id;
 ```
 
-Column/attribute filters involve checking which fields should be returned or masked.
+Column/attribute filters involve checking which fields should be returned or masked according to permission outcomes.
 
 ---
 
@@ -588,6 +674,7 @@ To defend against prompt injection and unintended privilege escalation:
 * Agents may request data but **cannot contribute policy logic**
 * Rule evaluation must be deterministic and safe
 * Variables like `${…}` are expanded only server-side
+* Invalid policy payloads are denied by default (fail-closed)
 
 This ensures that agents *never generate policy conditions* but only request actions against enforced policies.
 
@@ -595,7 +682,7 @@ This ensures that agents *never generate policy conditions* but only request act
 
 ## **12. Accounting & Auditing**
 
-All enforcement decisions are logged:
+Authorization-relevant decisions should be logged:
 
 | Field     | Purpose                       |
 | --------- | ----------------------------- |
@@ -613,6 +700,10 @@ Audit events are appended as DynamoDB items under:
 
 This supports compliance and incident investigation.
 
+> [!NOTE]
+> Current implementation already records authservice audit events in this partition.
+> Data-plane authorization decision auditing is progressively aligned to the same model.
+
 ---
 
 ## **13. Summary**
@@ -622,10 +713,10 @@ The LTBase AAA framework:
 * Cleanly separates **Authentication**, **Identity Binding**, and **Authorization**
 * Supports enterprise onboarding models with social login only
 * Provides **policy-driven identity binding** for invitations, whitelists, and approvals
-* Enforces both **row-level** and **column/attribute-level** permissions
-* Integrates permission evaluation with EAV business data
-* Reuses existing LTBase logic rule syntax for all policies
-* Expands roles hierarchically
+* Uses fail-closed **grant-based row enforcement** as current baseline
+* Extends toward permission-profile-driven **row/column outcomes**
+* Supports both grant filters and LTBase rule syntax in policy storage
+* Expands roles hierarchically and combines role/user principals
 * Ensures AI agent safety
 * Generates complete audit trails
 
