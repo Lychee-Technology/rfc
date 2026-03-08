@@ -421,7 +421,7 @@ Identity records are stored in the shared physical table with project-scoped key
 | Refresh session | `auth#project#{project_id}#session#{refresh_jti}` | `profile` | Rotation/revocation state |
 | Session edge | `auth#project#{project_id}#session_parent#{parent_jti}` | `child#{refresh_jti}` | Revoke-chain traversal |
 | Referral | `auth#project#{project_id}#ref#{code_b64}` | `profile` | Invite validation/consumption |
-| Audit event | `auth#project#{project_id}#audit` | `ts#{unix_ms}#{rand}` | Time-ordered append log |
+| Audit event | `auth#audit#project#{project_id}#date#{year-month-day}` | `ts#{unix_ms}#{rand}` | Time-ordered append log |
 
 ### **5.5 Project Isolation Strategy (No SQL Views)**
 
