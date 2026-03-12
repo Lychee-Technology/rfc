@@ -608,3 +608,173 @@ Orchestrator Agent
 - LadybugDB 不在热路径上
 - 承担冷数据图遍历、历史审计、高 fan-out 分析
 - 支持直接以 Parquet 作为外部存储映射 node/relationship table，无需导入
+
+## 10. Schema 驱动的声明式血缘
+
+### 10.1 设计动机
+
+第 4 节描述的操作性血缘捕获的是 **AI Agent 的执行过程**：哪个工具被调用、哪个 LLM 做了推理、哪个子 Agent 被派发。这些节点回答的是"谁生产了这条记录"。
+
+但在 Forma 的 JSON Schema 中，模型间的关系已经通过 `$ref` 显式声明（见 `JSON-Schema-Ext.md`）。当一条 `ai_note` 记录写入时，它的 `source_doc_id` 字段引用了 `document` 模型——这个关系在 schema 中是静态已知的，无需等待 AI Agent 在运行时手动埋点。
+
+声明式血缘的目标是在 **Forma CRUD 写入层**拦截这类关系，自动生成血缘边，作为操作性血缘的互补：
+
+| 维度 | 操作性血缘（第 4 节） | 声明式血缘（本节） |
+| :--- | :--- | :--- |
+| 捕获位置 | Tool / LLM / Dispatch 边界 | Forma CRUD 写入拦截器 |
+| 捕获对象 | AI 推理与工具执行过程 | Schema `$ref` 字段声明的记录间关系 |
+| 触发条件 | AI Agent 执行 | 任何 Forma Create / Update 操作 |
+| 回答的问题 | 谁（哪个 Agent/LLM）写了这条记录 | 这条记录在数据模型上依赖哪些记录 |
+| `source_type` | `tool_call` / `llm_inference` 等 | `schema_relation`（新增） |
+
+两层血缘共用第 5 节的存储结构，通过 `lineage_entity_ref(schema_id, row_id)` 在查询时关联。
+
+### 10.2 JSON Schema 扩展：`x-lineage-role`
+
+在 `$ref` 字段上增加可选注解 `x-lineage-role`，声明该引用在血缘语义上的角色。**仅有此注解的字段才触发血缘捕获**，无注解的 `$ref` 只作为普通 FK，不生成血缘边。
+
+```json
+// ai_note.schema.json
+{
+  "type": "object",
+  "properties": {
+    "id": { "$ref": "#/$defs/id" },
+    "source_doc_id": {
+      "$ref": "document.schema.json#/$defs/id",
+      "x-lineage-role": "derived_from"
+    },
+    "reference_id": {
+      "$ref": "document.schema.json#/$defs/id",
+      "x-lineage-role": "source"
+    },
+    "category_id": {
+      "$ref": "category.schema.json#/$defs/id"
+      // 无注解 → 纯 FK 归属，不生成血缘边
+    }
+  },
+  "x-unique-property": "id"
+}
+```
+
+`x-lineage-role` 取值语义：
+
+| 值 | 含义 | 生成血缘边 |
+| :--- | :--- | :--- |
+| `derived_from` | 此记录由引用记录派生或生成 | 是 |
+| `source` | 引用记录是此记录的原始信息来源 | 是 |
+| （无注解） | 纯结构性归属（FK） | 否 |
+
+### 10.3 CRUD 写入拦截器
+
+在 Forma 的 Create / Update 路径中加入血缘钩子，复用第 5 节已有的 `LineageStore` 接口。
+
+```go
+// 新增 SourceType
+const SourceSchemaRelation SourceType = "schema_relation"
+
+// SchemaLineageRef 描述 schema 中一个带 x-lineage-role 的 $ref 字段。
+type SchemaLineageRef struct {
+    FieldName      string
+    Role           string // "derived_from" | "source"
+    TargetSchemaID int
+}
+
+// SchemaRelationParser 从 schema registry 中提取 x-lineage-role 字段。
+type SchemaRelationParser interface {
+    ExtractLineageRefs(schemaID int) []SchemaLineageRef
+}
+
+type FormaCRUDInterceptor struct {
+    store        LineageStore
+    schemaParser SchemaRelationParser
+}
+
+// AfterWrite 在 Forma 写操作完成后调用，自动为带 x-lineage-role 的字段生成血缘节点。
+func (i *FormaCRUDInterceptor) AfterWrite(
+    ctx context.Context,
+    schemaID int,
+    rowID uuid.UUID,
+    record map[string]any,
+    traceID uuid.UUID,
+    sessionID uuid.UUID,
+    agentID string,
+) error {
+    refs := i.schemaParser.ExtractLineageRefs(schemaID)
+
+    for _, ref := range refs {
+        val, ok := record[ref.FieldName]
+        if !ok || val == nil {
+            continue
+        }
+        parentRowID, err := uuid.Parse(fmt.Sprint(val))
+        if err != nil {
+            continue
+        }
+
+        node := LineageNode{
+            NodeID:      uuid.Must(uuid.NewV7()),
+            ParentIDs:   nil,
+            CreatedAtMs: time.Now().UnixMilli(),
+            SourceType:  SourceSchemaRelation,
+            SourceDetail: mustMarshal(map[string]any{
+                "field":        ref.FieldName,
+                "lineage_role": ref.Role,
+            }),
+            TransformType: TransformFilter, // 结构性关系，无数据变换
+            AgentID:       agentID,
+            SessionID:     sessionID,
+            TraceID:       traceID,
+        }
+
+        if err := i.store.SaveNode(ctx, node); err != nil {
+            return err
+        }
+        // 当前记录：输出方
+        if err := i.store.SaveEntityRef(ctx, node.NodeID, "output_ref", schemaID, rowID, 0, 0); err != nil {
+            return err
+        }
+        // 引用记录：来源方
+        if err := i.store.SaveEntityRef(ctx, node.NodeID, "source_ref", ref.TargetSchemaID, parentRowID, 0, 0); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+`SaveEntityRef` 对应第 5.1 节 `lineage_entity_ref` 表的写入，复用已有接口，无需修改存储层。
+
+### 10.4 与操作性血缘的关联
+
+当 AI Agent 通过 Tool 写入一条 `ai_note` 记录时，两层血缘节点并存于同一存储：
+
+```
+[操作性节点]   source_type=tool_call, agent_id=summarize-agent
+      │  entity_ref: output_ref → ai_note#<row_id>
+      │
+[声明式节点]   source_type=schema_relation, field=source_doc_id, role=derived_from
+      │  entity_ref: output_ref → ai_note#<row_id>
+      └  entity_ref: source_ref → document#<doc_id>
+```
+
+两个节点通过 `lineage_entity_ref(schema_id=ai_note_schema, row_id=<row_id>)` 关联，查询时可合并为单一视图：
+
+```sql
+-- 查询一条 ai_note 记录的完整血缘（操作性 + 声明式）
+SELECT n.source_type, n.agent_id, r.ref_role, r.schema_id, r.row_id
+FROM lineage_entity_ref r
+JOIN lineage_node_main n ON n.project_id = r.project_id AND n.node_id = r.node_id
+WHERE r.project_id = $1
+  AND r.schema_id  = $2   -- ai_note schema_id
+  AND r.row_id     = $3   -- ai_note row_id
+ORDER BY n.created_at_ms;
+```
+
+### 10.5 噪声控制策略
+
+| 策略 | 说明 |
+| :--- | :--- |
+| 显式注解才触发 | 无 `x-lineage-role` 的 `$ref` 字段不生成血缘边，纯 FK 归属不参与血缘图 |
+| 空值跳过 | 若引用字段为 `null` 或缺失，跳过该字段，不生成孤立节点 |
+| UUID 格式校验 | 引用值无法解析为合法 UUID 时静默跳过，不阻断写入主流程 |
+| 异步写入 | `AfterWrite` 可在写入主流程成功后异步执行，血缘捕获失败不影响业务写操作 |
