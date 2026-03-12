@@ -656,13 +656,15 @@ Orchestrator Agent
 }
 ```
 
-`x-lineage-role` 取值语义：
+`x-lineage-role` 取值语义，对应 [W3C PROV-O](https://www.w3.org/TR/prov-o/) 标准谓词：
 
-| 值 | 含义 | 生成血缘边 |
-| :--- | :--- | :--- |
-| `derived_from` | 此记录由引用记录派生或生成 | 是 |
-| `source` | 引用记录是此记录的原始信息来源 | 是 |
-| （无注解） | 纯结构性归属（FK） | 否 |
+| 值 | 含义 | PROV-O 对应 | 生成血缘边 |
+| :--- | :--- | :--- | :--- |
+| `derived_from` | 此记录由引用记录经过变换、加工或生成而来，存在明确的数据转换过程 | [`prov:wasDerivedFrom`](https://www.w3.org/TR/prov-o/#wasDerivedFrom) | 是 |
+| `source` | 引用记录是此记录的原始信息来源（原始素材），当前记录是对其进行整理或加工的产物，但引用记录本身未经转换 | [`prov:hadPrimarySource`](https://www.w3.org/TR/prov-o/#hadPrimarySource) | 是 |
+| （无注解） | 纯结构性归属（FK），无数据流转语义 | — | 否 |
+
+**选择指引**：若当前记录是对引用记录内容的直接加工结果（如 LLM 摘要、格式转换），选 `derived_from`；若引用记录只是提供了背景素材，当前记录有独立内容（如引用了某文档作为知识来源但内容是另外生成的），选 `source`。两者在存储层和查询层无差异，区别仅用于审计展示。
 
 ### 10.3 CRUD 写入拦截器
 

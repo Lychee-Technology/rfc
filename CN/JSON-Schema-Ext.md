@@ -103,12 +103,12 @@ JSON Schema 规范里，是可以用 [$ref](https://json-schema.org/understandin
 
 **仅有此注解的 `$ref` 字段才触发血缘捕获**，无注解的 `$ref` 仅作为普通 FK，不生成血缘边。
 
-取值：
+取值语义参照 [W3C PROV-O](https://www.w3.org/TR/prov-o/) 标准谓词：
 
-| 值 | 含义 |
-| :--- | :--- |
-| `derived_from` | 当前记录由引用记录派生或生成 |
-| `source` | 引用记录是当前记录的原始信息来源 |
+| 值 | 含义 | PROV-O 对应 |
+| :--- | :--- | :--- |
+| `derived_from` | 当前记录由引用记录经变换或加工生成，存在明确数据转换过程 | [`prov:wasDerivedFrom`](https://www.w3.org/TR/prov-o/#wasDerivedFrom) |
+| `source` | 引用记录是当前记录的原始信息来源（素材），当前记录内容独立生成 | [`prov:hadPrimarySource`](https://www.w3.org/TR/prov-o/#hadPrimarySource) |
 
 示例：
 
