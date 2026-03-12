@@ -43,19 +43,20 @@ The authentication layer is responsible for:
 
 ### **2.2 External Identity Model**
 
-Current implementation resolves external identity by deriving a **deterministic internal `user_id`** from normalized identity tuple:
+Current implementation resolves external identity by combining a project-scoped lookup item with a deterministic fallback:
 
 * `project_id`
 * `provider`
 * `issuer`
 * `sub`
 
-Login does not require querying a dedicated external-lookup item.  
-Instead, authservice computes deterministic `user_id` and reads:
+Authservice first tries an external lookup item under the project root partition.  
+If no lookup item exists, it derives deterministic `user_id` and reads the user profile directly.
 
 | Item Type | Key Pattern | Purpose |
 | --------- | ----------- | ------- |
-| User Profile | `PK: auth#project#{project_id}#user#{user_id}`<br>`SK: profile` | Resolve whether identity is already bound |
+| External Lookup | `PK: auth#project#{project_id}`<br>`SK: lookup_ext#{provider_b64}#{issuer_b64}#{sub_b64}` | Resolve external identity to internal `user_id` |
+| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | Resolve whether identity is already bound |
 
 The user profile remains the source of truth for binding state in the current path.
 
@@ -209,7 +210,7 @@ User profile is stored as a DynamoDB item:
 
 | Item Type | Key Pattern | Core Attributes |
 | --------- | ----------- | --------------- |
-| User Profile | `PK: auth#project#{project_id}#user#{user_id}`<br>`SK: profile` | `user_id`, `project_id`, `email`, `email_verified`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub` |
+| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims` |
 
 ### **3.3 Identity Binding Schema**
 
@@ -218,8 +219,8 @@ LTBase authservice uses an **item-based binding model** instead of a dedicated `
 | Binding State | DynamoDB Representation |
 | ------------- | ----------------------- |
 | Unbound | No user profile item at deterministic `user_id` |
-| Bound | User profile item exists at `auth#project#{project_id}#user#{user_id}` |
-| Bound via code | Referral item validated + consumed in the same transaction that creates user profile (optional email lookup may also be written) |
+| Bound | User profile item exists at `PK auth#project#{project_id}` + `SK user#{user_id}` |
+| Bound via code | Referral item is validated and consumed in the same transaction that creates the user profile and external lookup (optional verified-email lookup may also be written) |
 
 This design enables:
 
@@ -245,13 +246,13 @@ sequenceDiagram
     SocialProvider-->>AuthService: Claims (sub, iss, email)
 
     AuthService->>AuthService: Normalize identity + derive deterministic user_id
-    AuthService->>DynamoDB: Get user profile item by user_id
+    AuthService->>DynamoDB: Get external lookup, else get user profile by deterministic user_id
 
     alt Not bound
         AuthService-->>Client: 403 IDENTITY_UNBOUND
         Client->>AuthService: POST /api/v1/id_bindings/{provider} (code)
-        AuthService->>DynamoDB: Validate referral + create user profile (transaction)
-        AuthService->>DynamoDB: Optional email lookup write
+        AuthService->>DynamoDB: Validate referral + create user profile/external lookup (transaction)
+        AuthService->>DynamoDB: Optional verified email lookup write
     end
 
     AuthService->>AuthorizationEngine: Resolve roles & permissions
@@ -331,7 +332,7 @@ The authorization engine must ensure:
 The current data-plane enforcement path is IAM-style and DynamoDB-backed:
 
 * Principal = requester `sub` + `role_ids` from JWT claims
-* Lookup `resource_grant` records under principal partition
+* Lookup `resource_grant` records under the project root partition
 * Enforce operation (`create/read/update/delete`) using `ops`
 * Apply either:
   * explicit `resource_id` grants, or
@@ -367,6 +368,7 @@ This dynamic attribute model requires authorization conditions that match attrib
 | Item Family | Purpose |
 | ----------- | ------- |
 | `user profile` | Internal user identity subject |
+| `external lookup` | Resolve provider/issuer/sub to `user_id` |
 | `email lookup` | Resolve verified email to `user_id` |
 | `user role` | User → role mapping |
 | `role profile` | Role metadata and parent role (inheritance) |
@@ -375,7 +377,7 @@ This dynamic attribute model requires authorization conditions that match attrib
 | `policy profile` | IAM-style policy document (`policy_document`) |
 | `principal policy attachment` | Attach policy to principal (user/role) |
 | `resource grant` | Principal-scoped resource operation grant (`ops`, `resource_id`/`filter_json`) |
-| `resource grant reverse` | Reverse index for resource-centric inspection |
+| `binding policy` | Bind-time gating policy (`enabled`, `priority`, `rules`) |
 | `refresh session` | Refresh token lifecycle (issued/rotated/revoked) |
 | `session parent-child edge` | Revoke-chain traversal |
 | `referral profile` | Invite/referral validation and consume state |
@@ -407,20 +409,20 @@ Identity records are stored in the shared physical table with project-scoped key
 
 | Domain | `PK` Pattern | `SK` Pattern | Notes |
 | ------ | ------------ | ------------ | ----- |
-| User profile | `auth#project#{project_id}#user#{user_id}` | `profile` | Internal user principal |
-| Verified email lookup | `auth#project#{project_id}#email#{email_lower_b64}` | `user` | Optional/conditional |
-| User-role mapping | `auth#project#{project_id}#user#{user_id}` | `role#{role_id}` | Query roles by user |
-| Role profile | `auth#project#{project_id}#role#{role_id}` | `profile` | Includes parent role |
-| Role-permission mapping | `auth#project#{project_id}#role#{role_id}` | `permission#{permission_id}` | Query permissions by role |
-| Permission profile | `auth#project#{project_id}#permission#{permission_id}` | `profile` | Permission payload |
-| Policy profile | `auth#project#{project_id}#policy#{policy_id}` | `profile` | IAM-style policy document |
-| Principal policy attachment | `auth#project#{project_id}#principal#{type}#{id}` | `policy#{policy_id}` | Attach policy to user/role principal |
-| Resource grant | `auth#project#{project_id}#principal#{type}#{id}` | `grant#{schema}#{resource_or_filter}` | Operation-level grant with selector |
-| Resource grant reverse | `auth#project#{project_id}#resource#{schema}#{resource_or_filter}` | `principal#{type}#{id}` | Reverse lookup for governance/debug |
-| Binding policy | `auth#project#{project_id}#binding_policy` | `profile#{policy_id}` | Query-enabled policy loading |
-| Refresh session | `auth#project#{project_id}#session#{refresh_jti}` | `profile` | Rotation/revocation state |
-| Session edge | `auth#project#{project_id}#session_parent#{parent_jti}` | `child#{refresh_jti}` | Revoke-chain traversal |
-| Referral | `auth#project#{project_id}#ref#{code_b64}` | `profile` | Invite validation/consumption |
+| User profile | `auth#project#{project_id}` | `user#{user_id}` | Internal user principal |
+| External lookup | `auth#project#{project_id}` | `lookup_ext#{provider_b64}#{issuer_b64}#{sub_b64}` | Provider/issuer/sub → `user_id` |
+| Verified email lookup | `auth#project#{project_id}` | `lookup_email#{email_lower_b64}` | Optional/conditional |
+| User-role mapping | `auth#project#{project_id}` | `user_role#{user_id}#{role_id}` | Query roles by user |
+| Role profile | `auth#project#{project_id}` | `role#{role_id}` | Includes parent role |
+| Role-permission mapping | `auth#project#{project_id}` | `role_permission#{role_id}#{permission_id}` | Query permissions by role |
+| Permission profile | `auth#project#{project_id}` | `permission#{permission_id}` | Permission payload |
+| Policy profile | `auth#project#{project_id}` | `policy#{policy_id}` | IAM-style policy document |
+| Principal policy attachment | `auth#project#{project_id}` | `principal_policy#{type}#{id}#{policy_id}` | Attach policy to user/role principal |
+| Resource grant | `auth#project#{project_id}` | `grant#{type}#{id}#{schema}#{selector}` | `selector = resource#{resource_id}` or `filter#{filter_hash}` |
+| Binding policy | `auth#project#{project_id}` | `binding_policy#{policy_id}` | Bind-time policy loading |
+| Referral | `auth#project#{project_id}` | `ref#{code_b64}` | Invite validation/consumption |
+| Refresh session | `auth#project#{project_id}#session` | `session#{refresh_jti}` | Rotation/revocation state |
+| Session edge | `auth#project#{project_id}#session` | `child#{parent_jti}#{child_jti}` | Revoke-chain traversal |
 | Audit event | `auth#audit#project#{project_id}#date#{year-month-day}` | `ts#{unix_ms}#{rand}` | Time-ordered append log |
 
 ### **5.5 Project Isolation Strategy (No SQL Views)**
@@ -429,7 +431,8 @@ Project isolation is implemented by **key scoping**, not SQL views:
 
 | Isolation Control | Description |
 | ----------------- | ----------- |
-| Key namespace | Every auth item is prefixed with `auth#project#{project_id}` |
+| Static config root | Project-scoped auth configuration lives under `PK = auth#project#{project_id}` |
+| Session root | Runtime sessions live under `PK = auth#project#{project_id}#session` |
 | Lookup discipline | All authservice reads/writes include project-scoped keys |
 | Conditional writes | Binding/session operations use conditional or transactional writes for safety |
 
@@ -586,8 +589,8 @@ The engine must expand inherited roles before evaluating permissions.
 Fetch principal grants directly from DynamoDB:
 
 ```text
-PK: auth#project#{project_id}#principal#{principal_type}#{principal_id}
-SK begins_with "grant#{schema_name}#"
+PK: auth#project#{project_id}
+SK begins_with "grant#{principal_type}#{principal_id}#{schema_name}#"
 ```
 
 Then evaluate:
@@ -600,18 +603,18 @@ Then evaluate:
 Fetch permissions associated with all effective roles:
 
 ```text
-1) Query each role partition:
-   PK: auth#project#{project_id}#role#{role_id}
-   SK begins_with "permission#"
+1) Query project root partition:
+   PK: auth#project#{project_id}
+   SK begins_with "role_permission#{role_id}#"
 
 2) Collect unique permission_id values.
 
-3) Get each permission profile:
-   PK: auth#project#{project_id}#permission#{permission_id}
-   SK: profile
+3) Get each permission profile from the same project root partition:
+   PK: auth#project#{project_id}
+   SK: permission#{permission_id}
 ```
 
-At runtime, this is implemented with DynamoDB `Query` + `GetItem`/batch read patterns, then de-duplicated in memory.
+At runtime, this is implemented with DynamoDB `Query` + `GetItem`, then de-duplicated in memory.
 
 ### **9.4 Context Expansion**
 
