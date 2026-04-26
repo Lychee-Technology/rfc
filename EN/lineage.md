@@ -1,10 +1,29 @@
-# AI Agent Data Lineage Technical Specification
+# LTBase Provenance and Data Lineage Technical Specification
 
 ## 1. Overview
 
-This document defines the complete technical design for AI Agent data lineage in the LTBase platform. The lineage system captures data flows automatically at the framework layer without requiring any manual instrumentation in business code.
+This document defines the provenance and lineage subsystem for LTBase.
 
-The storage layer uses LTBase's native hot-cold tiered architecture: hot data is written to AWS DSQL, flushed to S3 Parquet via CDC, and cold-data graph queries are executed by LadybugDB. Lineage data does not enter the business EAV tables; it associates with business entity versions through explicit references.
+Lineage is not the primary semantic model of LTBase. The primary semantic model is defined in [ontology.md](./ontology.md). This document focuses on one narrower concern: tracing where outputs came from and how they were produced.
+
+The lineage subsystem captures data flows automatically at the framework layer without requiring manual instrumentation in business code. It records:
+
+- operational provenance across tools, models, queries, and agent dispatch
+- record-to-record derived-from references declared explicitly for provenance capture
+- object references that let provenance attach to ontology objects without becoming the ontology itself
+
+The storage layer uses LTBase's native hot-cold tiered architecture: hot data is written to AWS DSQL, flushed to S3 Parquet via CDC, and cold-data graph queries are executed by LadybugDB. Lineage data does not enter the business EAV tables; it associates with business objects and entity versions through explicit references.
+
+### 1.1 Relationship To Ontology
+
+LTBase should keep ontology and lineage as adjacent but separate layers:
+
+| Layer | Primary question |
+| :--- | :--- |
+| Ontology | What is this object, what is it related to, and what actions are valid on it? |
+| Lineage | Where did this output come from, and which agents, tools, models, or records contributed to it? |
+
+This separation avoids a common design mistake: using lineage edges as a substitute for a business semantic model.
 
 ## 2. Core Challenges
 
@@ -617,23 +636,32 @@ Orchestrator Agent
 
 The operational lineage capture in Section 4 records the **AI Agent's execution process**: which tool was called, which LLM performed inference, which sub-agent was dispatched. These nodes answer the question "who produced this record."
 
-In Forma's JSON Schema, however, relationships between models are already explicitly declared via `$ref` (see `JSON-Schema-Ext.md`). When an `ai_note` record is written, its `source_doc_id` field references the `document` model — this relationship is statically known from the schema and does not require the AI Agent to instrument it at runtime.
+In Forma's JSON Schema, some references also describe **provenance-relevant dependencies** between records. When an `ai_note` record is written, its `source_doc_id` field may reference the `document` model as a provenance source. This should be captured as a derived-from relationship for traceability.
 
-The goal of declarative lineage is to intercept these relationships at the **Forma CRUD write layer** and automatically generate lineage edges, complementing operational lineage:
+The goal of declarative provenance capture is to intercept these relationships at the **Forma CRUD write layer** and automatically generate lineage edges, complementing operational lineage.
+
+These edges do **not** replace ontology link types:
+
+- ontology link types represent stable business relationships
+- lineage edges represent provenance and derivation
+
+The same field may inform both systems, but they serve different questions and should stay separate in the conceptual model.
+
+The comparison is therefore:
 
 | Dimension | Operational Lineage (Section 4) | Declarative Lineage (this section) |
 | :--- | :--- | :--- |
 | Capture point | Tool / LLM / Dispatch boundaries | Forma CRUD write interceptor |
-| Capture target | AI inference and tool execution process | Record-to-record relationships declared via schema `$ref` fields |
+| Capture target | AI inference and tool execution process | Provenance-relevant record-to-record dependencies declared via schema annotations |
 | Trigger | AI Agent execution | Any Forma Create / Update operation |
-| Question answered | Who (which Agent/LLM) wrote this record | Which records does this record depend on in the data model |
+| Question answered | Who (which Agent/LLM) wrote this record | Which records does this record depend on in the provenance graph |
 | `source_type` | `tool_call` / `llm_inference` / etc. | `schema_relation` (new value) |
 
 Both lineage layers share the storage structure from Section 5 and are joined at query time via `lineage_entity_ref(schema_id, row_id)`.
 
 ### 10.2 JSON Schema Extension: `x-lineage-role`
 
-An optional annotation `x-lineage-role` is added to `$ref` fields to declare the semantic role of the reference in lineage. **Only fields with this annotation trigger lineage capture** — `$ref` fields without the annotation are treated as plain foreign keys and do not generate lineage edges.
+An optional annotation `x-lineage-role` is added to `$ref` fields to declare the provenance role of the reference. **Only fields with this annotation trigger lineage capture**. `$ref` fields without the annotation remain ordinary schema relationships and should be interpreted by the ontology layer, not the lineage layer.
 
 ```json
 // ai_note.schema.json
@@ -658,13 +686,13 @@ An optional annotation `x-lineage-role` is added to `$ref` fields to declare the
 }
 ```
 
-`x-lineage-role` value semantics, mapped to [W3C PROV-O](https://www.w3.org/TR/prov-o/) standard predicates:
+`x-lineage-role` provenance semantics, mapped to [W3C PROV-O](https://www.w3.org/TR/prov-o/) standard predicates:
 
 | Value | Meaning | PROV-O mapping | Generates lineage edge |
 | :--- | :--- | :--- | :--- |
 | `derived_from` | This record was transformed, processed, or generated from the referenced record — an explicit data transformation exists | [`prov:wasDerivedFrom`](https://www.w3.org/TR/prov-o/#wasDerivedFrom) | Yes |
 | `source` | The referenced record is the original information source (raw material); the current record is a processed or organized product, but the referenced record itself was not transformed | [`prov:hadPrimarySource`](https://www.w3.org/TR/prov-o/#hadPrimarySource) | Yes |
-| (no annotation) | Pure structural membership (FK) with no data-flow semantics | — | No |
+| (no annotation) | Pure structural membership (FK) with no provenance semantics | — | No |
 
 **Selection guide**: If the current record is a direct processing result of the referenced record's content (e.g., an LLM summary or format conversion), use `derived_from`. If the referenced record only provides background material and the current record has independent content (e.g., a document cited as a knowledge source but the content was generated separately), use `source`. The two values have no difference at the storage or query layer; the distinction is only used for audit presentation.
 
@@ -756,7 +784,7 @@ func (i *FormaCRUDInterceptor) AfterWrite(
 
 `SaveEntityRef` corresponds to writes to the `lineage_entity_ref` table in Section 5.1. It is added to the `LineageStore` interface so that no storage-layer changes are needed beyond the interface definition.
 
-### 10.4 Correlation with Operational Lineage
+### 10.4 Correlation with Operational Lineage and Ontology
 
 When an AI Agent writes an `ai_note` record via a Tool, both lineage layers coexist in the same store:
 
@@ -769,10 +797,32 @@ When an AI Agent writes an `ai_note` record via a Tool, both lineage layers coex
       └  entity_ref: source_ref → document#<doc_id>
 ```
 
-Both nodes are linked via `lineage_entity_ref(schema_id=ai_note_schema, row_id=<row_id>)` and can be merged into a single view at query time:
+Both nodes are linked via `lineage_entity_ref(schema_id=ai_note_schema, row_id=<row_id>)` and can be merged into a single provenance view at query time.
+
+At the architecture level, that same `(schema_id, row_id)` pair should also resolve upward into the ontology object reference for `ai_note`. This produces a clean layered model:
+
+- ontology object reference identifies the business object
+- lineage nodes explain how that object version or derived output was produced
+
+Example conceptual stack:
+
+```text
+Ontology object: ai_note#<row_id>
+    │
+    ├── business links resolved by ontology
+    │
+    └── provenance links resolved by lineage
+            ├── tool_call
+            ├── llm_inference
+            └── schema_relation / derived_from
+```
+
+The object remains the entry point. Lineage remains an attached explanatory graph.
+
+The query can therefore start from object identity while still using lineage storage:
 
 ```sql
--- Query the complete lineage of an ai_note record (operational + declarative)
+-- Query the complete provenance of an ai_note record (operational + declarative)
 SELECT n.source_type, n.agent_id, r.ref_role, r.schema_id, r.row_id
 FROM lineage_entity_ref r
 JOIN lineage_node_main n ON n.project_id = r.project_id AND n.node_id = r.node_id
@@ -786,7 +836,17 @@ ORDER BY n.created_at_ms;
 
 | Strategy | Description |
 | :--- | :--- |
-| Explicit annotation required | `$ref` fields without `x-lineage-role` do not generate lineage edges; pure FK membership does not participate in the lineage graph |
+| Explicit annotation required | `$ref` fields without `x-lineage-role` do not generate lineage edges; ordinary business links stay in the ontology layer |
 | Null value skip | If a reference field is `null` or absent, skip it and do not generate an isolated node |
 | UUID format validation | If the reference value cannot be parsed as a valid UUID, silently skip it without blocking the main write flow |
 | Async execution | `AfterWrite` can run asynchronously after the main write succeeds; a lineage capture failure does not affect the business write operation |
+
+## 11. Recommendation
+
+LTBase should adopt the following boundary:
+
+- ontology is the primary business semantic layer
+- lineage is the attached provenance and derivation layer
+- schema annotations may feed both layers, but with different meanings
+
+This keeps provenance useful without turning it into an overloaded replacement for object modeling, governance, and action semantics.
