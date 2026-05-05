@@ -1,4 +1,4 @@
-# High-Level Design (HLD): Serverless State Machine Workflow Engine (Revised)
+# High-Level Design (HLD): Serverless State Machine Workflow Engine
 
 ## 1. Introduction
 
