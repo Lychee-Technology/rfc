@@ -336,7 +336,7 @@ The current data-plane enforcement path is IAM-style and DynamoDB-backed:
 * Enforce operation (`create/read/update/delete`) using `ops`
 * Apply either:
   * explicit `resource_id` grants, or
-  * `filter_json` grants converted to Forma conditions
+  * `filter` grants converted to Forma conditions
 * Reject by default when no matching grants are found (fail-closed)
 
 ### **4.2 Integrated Direction (Next Layer)**
@@ -465,7 +465,7 @@ General rules:
 LTBase currently uses two structured policy payloads:
 
 1. **Permission Rule JSON (`rule_json`)** for permission profiles
-2. **Grant Filter JSON (`filter_json`)** for resource grants
+2. **Grant Filter (`filter`)** for resource grants
 
 ### **6.1 Permission Rule JSON (`l/c/a/v`)**
 
@@ -496,9 +496,9 @@ Permission rules reuse the LTBase query-rule format:
 
 This format supports nested logic and serves both row-level and column-level conditions.
 
-### **6.2 Grant Filter JSON (`filter_json`)**
+### **6.2 Grant Filter (`filter`)**
 
-For grant-based row scoping, filters are stored as:
+For grant-based row scoping, create `resource_grant` records with a `filter` object:
 
 ```json
 {
@@ -508,6 +508,7 @@ For grant-based row scoping, filters are stored as:
 ```
 
 Each key is an attribute name; each value is an operator-prefixed expression supported by the data-plane filter parser.
+Do not send `filter_json` in `create-iam-authz-records` requests; that field is ignored by the control plane. Stored records may expose the persisted selector as `filter_json`/`filter_hash` internally.
 
 ---
 
@@ -518,7 +519,7 @@ A row-level rule determines whether a given entity (row) is visible or actionabl
 Current enforcement combines:
 
 * `resource_id` grants (explicit allow-list)
-* `filter_json` grants (attribute condition scope)
+* `filter` grants (attribute condition scope)
 
 **Example — User can read only rows they own:**
 
@@ -596,7 +597,7 @@ SK begins_with "grant#{principal_type}#{principal_id}#{schema_name}#"
 Then evaluate:
 
 * operation compatibility via `ops`
-* selector via `resource_id` or `filter_json`
+* selector via `resource_id` or `filter`
 
 ### **9.3 Permission Fetch (Integrated Layer)**
 
