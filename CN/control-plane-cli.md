@@ -30,7 +30,7 @@
 | `data` | JSON array / object | 视 action 而定 | action 专属数据载荷 |
 | `dry_run` | bool | 否 | 预览模式，不实际写入 |
 | `force` | bool | 否 | 覆盖已存在的冲突记录 |
-| `force_rebuild_views` | bool | 否 | `repair-project` 强制重建 Postgres 视图 |
+| `force_rebuild_views` | bool | 否 | `repair-project` 强制重建 PostgreSQL/DSQL 视图 |
 | `tenant_id` | UUID string | 否 | 兼容期 tenant ID（已废弃） |
 | `project_name` | string | 否 | 兼容期 project 名称（已废弃） |
 | `account_id` | string | 否 | 账户 ID |
@@ -55,7 +55,7 @@
 
 ### 4.2 `repair-project`
 
-检查并修复 project 的 DynamoDB 记录和 Postgres SQL 对象。支持 `dry_run` 预览。
+检查并修复 project 的 control-plane store 记录以及 PostgreSQL/DSQL SQL 对象。支持 `dry_run` 预览。
 
 ```json
 {
@@ -369,7 +369,7 @@
 
 ### 4.14 `import-referrals`
 
-向 DynamoDB 导入 referral code。支持单条和批量两种模式，重复 code 自动跳过。
+向 control-plane store 导入 referral code。支持单条和批量两种模式，重复 code 自动跳过。
 
 **单条**：
 
@@ -470,7 +470,9 @@ HTTP 状态码（HTTP 调用时适用）：
 | catalog 不存在 | `404` |
 | 执行失败 | `500` |
 
-## 6. DynamoDB 对象模型
+## 6. Control-Plane Store 对象模型（当前 DynamoDB backend）
+
+当前控制面支持 DynamoDB 与 PostgreSQL store。以下对象模型描述的是 **DynamoDB backend** 的物理布局，用于说明当前 Lambda / CLI 请求最终如何映射到底层记录。
 
 ### 6.1 Project Metadata
 
@@ -522,7 +524,7 @@ grant#<principal_type>#<principal_id>#<schema_name>#<selector>
 
 | 变量 | 说明 |
 |---|---|
-| `DYNAMODB_TABLE_NAME` 或 `LTBASE_TABLE_NAME` | Control Plane DynamoDB 表名 |
+| `DYNAMODB_TABLE_NAME` 或 `LTBASE_TABLE_NAME` | Control Plane store 的 DynamoDB 表名（DynamoDB backend） |
 | `PROJECT_ID` | Deployment project UUID |
 | `PROJECT_NAME` | Deployment project 名称 |
 | `ACCOUNT_ID` | 账户 ID |
@@ -543,9 +545,9 @@ Postgres/DSQL 连接（`repair-project`、`ensure-project` 需要）：
 | `project-id must be a valid UUID` | `project_id` 格式错误 |
 | `--account-id is required` | 操作非 deployment project 时未提供 `account_id` |
 | `unknown_action` | action 名称不存在或已废弃（如 `create-key`、`delete-key`） |
-| `project record is missing; provide --account-id to auto-create` | DynamoDB 中无 project 记录 |
-| `project runtime info is missing; provide account_id and api_base_url` | DynamoDB 中无 runtime info |
-| `permission denied for schema <name> (SQLSTATE 42501)` | Postgres 用户无对应 schema 权限 |
+| `project record is missing; provide --account-id to auto-create` | control-plane store 中缺少 project record（当前部署常见于 DynamoDB backend） |
+| `project runtime info is missing; provide account_id and api_base_url` | control-plane store 中缺少 runtime info（当前部署常见于 DynamoDB backend） |
+| `permission denied for schema <name> (SQLSTATE 42501)` | PostgreSQL/DSQL 用户无对应 schema 权限 |
 | `resource_id and filter cannot both be set` | `resource_grant` 同时传了 `resource_id` 和 `filter` |
 | `ops is required` / `unsupported op` | `resource_grant` 缺少 `ops` 或包含不支持的 op |
 
