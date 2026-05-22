@@ -210,7 +210,7 @@ User profile is stored as a DynamoDB item:
 
 | Item Type | Key Pattern | Core Attributes |
 | --------- | ----------- | --------------- |
-| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims` |
+| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims`, `primary_ou_id`, `report_to_user_id` |
 
 ### **3.3 Identity Binding Schema**
 
@@ -371,6 +371,10 @@ This dynamic attribute model requires authorization conditions that match attrib
 | `external lookup` | Resolve provider/issuer/sub to `user_id` |
 | `email lookup` | Resolve verified email to `user_id` |
 | `user role` | User → role mapping |
+| `ou profile` | Organizational Unit container with parent and materialized path |
+| `ou policy attachment` | Attach `policy_profile` to an OU; inherits to OU subtree (GPO-style) |
+| `ou user index` | Reverse index: list users by primary OU |
+| `direct report index` | Reverse index: list direct reports by manager |
 | `role profile` | Role metadata and parent role (inheritance) |
 | `role permission` | Role → permission mapping |
 | `permission profile` | Permission definition (`name`, `rule_json`, `outcome`) |
@@ -387,21 +391,28 @@ Permissions remain structured objects, not EAV records. Project-scoped client ca
 
 ### **5.3 Entity Relationships**
 
-The system follows a standard **RBAC (Role-Based Access Control)** model with support for hierarchical groups:
+The system follows a standard **RBAC (Role-Based Access Control)** model with support for hierarchical groups, plus an **Active Directory–style organizational hierarchy** for org-chart modeling:
 
 * **User**: The internal identity principal
 * **Role / Group**: Represents a collection of permissions or other roles
   * Groups are functionally equivalent to Roles
   * **Inheritance**: A Role can inherit from another Role (e.g., `Manager` inherits `Employee`)
+  * Roles are the **only** vehicle for cross-cutting / matrix membership (a user can hold many roles)
 * **Permission**: A specific access rule composed of a Logic Condition and an Outcome
+* **OU (Organizational Unit)**: Hierarchical container reflecting reporting structure
+  * Each user has exactly **one `primary_ou_id`** (AD-faithful single containment)
+  * OUs form a tree via `parent_ou_id` and a materialized `ou_path`
+  * **OUs are not ACL principals.** They carry authorization indirectly by attaching `policy_profile` items, which inherit down the OU subtree (analogous to AD Group Policy)
+* **Manager**: Single-valued `report_to_user_id` on each user; reverse `direct_report` index supports "who reports to X" queries. Dotted-line / matrix reporting is modeled with Roles, not with additional manager edges.
 
 **Relationship Flow:**
 
 1. **External Identity** is normalized to deterministic internal `user_id`, then mapped to **User Profile**
-2. **Users** are assigned **Roles** (via `user role` items)
+2. **Users** are assigned **Roles** (via `user role` items) and placed in exactly one **OU** (via `primary_ou_id`)
 3. **Roles** may be mapped to **Permissions** (via `role permission` items)
 4. **Principals** may also receive direct IAM-style grants (`resource_grant`) and policy attachments
-5. **Authorization** combines grant-based scope with permission profile semantics
+5. **OUs** may have `policy_profile` items attached; these flow to every user whose `primary_ou_id` sits in the OU subtree
+6. **Authorization** combines grant-based scope, role-derived permissions, and OU-inherited policies
 
 ### **5.4 DynamoDB Single-Table Key Definitions**
 
@@ -413,6 +424,10 @@ Identity records are stored in the shared physical table with project-scoped key
 | External lookup | `auth#project#{project_id}` | `lookup_ext#{provider_b64}#{issuer_b64}#{sub_b64}` | Provider/issuer/sub → `user_id` |
 | Verified email lookup | `auth#project#{project_id}` | `lookup_email#{email_lower_b64}` | Optional/conditional |
 | User-role mapping | `auth#project#{project_id}` | `user_role#{user_id}#{role_id}` | Query roles by user |
+| OU profile | `auth#project#{project_id}` | `ou#{ou_id}` | `parent_ou_id`, `ou_path` (materialized), `name`, `block_inheritance` (reserved) |
+| OU user index | `auth#project#{project_id}` | `ou_user#{ou_id}#{user_id}` | Reverse index for listing users in an OU |
+| OU policy attachment | `auth#project#{project_id}` | `ou_policy#{ou_id}#{policy_id}` | Attach `policy_profile` to OU; inherits via `ou_path` |
+| Direct report index | `auth#project#{project_id}` | `direct_report#{manager_user_id}#{report_user_id}` | Reverse index of `report_to_user_id` |
 | Role profile | `auth#project#{project_id}` | `role#{role_id}` | Includes parent role |
 | Role-permission mapping | `auth#project#{project_id}` | `role_permission#{role_id}#{permission_id}` | Query permissions by role |
 | Permission profile | `auth#project#{project_id}` | `permission#{permission_id}` | Permission payload |
@@ -457,6 +472,80 @@ General rules:
 * Do not use raw delimiters (`#`) inside key segments; always encode dynamic segments.
 * The same normalization pipeline must be shared by read and write paths.
 * Any invalid or empty normalized segment must fail fast at repository boundary.
+
+### **5.7 Organization Structure (Org Chart)**
+
+LTBase models organizational structure with two independent relationships, modeled after Microsoft Active Directory:
+
+| Relationship | Field | Cardinality | Purpose |
+| ------------ | ----- | ----------- | ------- |
+| Containment (OU) | `User.primary_ou_id` → `OU.ou_id` | Single-valued | Reflects where the user *sits* in the org chart; controls policy inheritance |
+| Reporting line | `User.report_to_user_id` → `User.user_id` | Single-valued | Reflects who the user *reports to*; enables manager-chain context in rules |
+
+> [!IMPORTANT]
+> Containment and reporting are **independent** axes. A user's manager need not sit in the same OU (e.g., functional manager in a different OU). Authorization rules can reference either or both.
+
+#### **5.7.1 OU Tree and Materialized Path**
+
+The OU tree is encoded with both a direct `parent_ou_id` pointer and a materialized `ou_path` for efficient subtree queries:
+
+```
+ou:rnd            parent_ou_id = null      ou_path = "/{ou_rnd}"
+ou:mobiledev      parent_ou_id = ou_rnd    ou_path = "/{ou_rnd}/{ou_mobiledev}"
+ou:team_android   parent_ou_id = ou_mobile ou_path = "/{ou_rnd}/{ou_mobiledev}/{ou_team_android}"
+```
+
+Key properties:
+
+* `ou_path` is built from **stable `ou_id` segments**, not display names, so renaming an OU does not invalidate the path.
+* "All users under R&D" becomes a simple `begins_with` predicate on `ou_path` — no recursive expansion at query time.
+* Moving an OU (changing `parent_ou_id`) requires rewriting `ou_path` and `ou_user` index entries for the entire subtree. This is treated as an administrative operation and may be applied asynchronously.
+* Each user has exactly one `primary_ou_id`. Cross-OU / matrix membership is **not modeled on the OU axis** — it is expressed by assigning the user additional Roles.
+
+#### **5.7.2 OU Policy Inheritance (GPO-Style)**
+
+Authorization is attached to OUs only through `policy_profile` items, via an **OU policy attachment** record:
+
+```
+PK: auth#project#{project_id}
+SK: ou_policy#{ou_id}#{policy_id}
+```
+
+At login, the authorization engine walks the user's `primary_ou.ou_path` from root to leaf and unions all attached policies into the effective policy set. This mirrors AD's GPO inheritance model: a policy attached at `R&D` automatically applies to every user under `R&D/MobileDev/Team_Android` without per-OU duplication.
+
+> [!NOTE]
+> OUs are **not** valid principals for `resource_grant` records or `principal_policy_attachment`. To grant something OU-wide, create (or pick) a `policy_profile` and attach it via `ou_policy`. Ad-hoc `policy_profile` instances may be created from the admin UI in a future version when an OU needs a one-off policy.
+
+##### **Inheritance Modifiers (Reserved, v1 Disabled)**
+
+The schema reserves two AD-equivalent flags. They are accepted in storage but ignored by the v1 evaluator; precedence rules will be specified before they are enabled.
+
+| Field | Location | AD Equivalent | Future Semantics |
+| ----- | -------- | ------------- | ---------------- |
+| `block_inheritance` | OU profile | "Block Inheritance" | When true, an OU stops inheriting policies from its ancestors |
+| `enforced` | OU policy attachment | "Enforced / No Override" | When true, a policy continues to flow downward even past a `block_inheritance` child |
+
+#### **5.7.3 Manager Relationship**
+
+The `report_to_user_id` attribute on a user profile is a single-valued pointer to that user's direct manager. The system maintains a `direct_report#{manager_user_id}#{report_user_id}` index for fast reverse lookup.
+
+* **Single-valued only.** Dotted-line / secondary managers are deliberately not modeled in the schema; express them with a dedicated Role (e.g., `Project_X_DottedReport`).
+* **Cycle prevention** is enforced at write time: a user cannot directly or transitively report to themselves.
+* **Chain depth** is bounded (default ≤ 10) when expanding the manager chain at login, to keep authorization context size predictable.
+
+#### **5.7.4 Effective Context From the Org Chart**
+
+These derived values are computed at login (or on policy refresh) and made available to rule evaluation:
+
+| Variable | Source | Notes |
+| -------- | ------ | ----- |
+| `${requester.primary_ou_id}` | User profile | The user's own OU |
+| `${requester.ou_path}` | OU profile | Materialized path of the primary OU |
+| `${requester.ou_ancestor_ids}` | Parsed from `ou_path` | All ancestor OU ids including self |
+| `${requester.manager_chain}` | Walk `report_to_user_id` upward | Bounded list of user_ids; requester excluded |
+| `${requester.direct_report_ids}` | `direct_report#` index | Only resolved on demand (potentially large) |
+
+These are populated and substituted by the engine; clients and AI agents cannot supply or override them.
 
 ---
 
@@ -585,6 +674,35 @@ The engine must expand inherited roles before evaluating permissions.
 > Current implementation resolves effective roles from both JWT `role_ids` and DynamoDB `user_role_attachment`,
 > then expands `parent_role_ids` transitively from role profiles (fail-closed on data access errors).
 
+### **9.1.1 OU Ancestor & Policy Expansion**
+
+In addition to role expansion, the engine resolves the user's OU containment chain and collects inherited policies:
+
+```text
+1) Load user profile, read primary_ou_id.
+2) Load OU profile; split ou_path on "/" to derive ou_ancestor_ids
+   (root → ... → primary OU).
+3) For each ou_id in ou_ancestor_ids:
+     Query PK: auth#project#{project_id}
+            SK begins_with "ou_policy#{ou_id}#"
+   Collect all referenced policy_id values.
+4) GetItem each policy_profile and union into the effective policy set.
+```
+
+Notes:
+
+* OU-inherited policies are merged with role-derived permissions and direct principal policy attachments before evaluation.
+* `block_inheritance` and `enforced` flags are reserved (see 5.7.2) and not applied in v1; ancestors always contribute.
+* OUs are never used as `principal_type` in resource grants.
+
+### **9.1.2 Manager Chain Resolution**
+
+The engine walks `report_to_user_id` upward to populate `${requester.manager_chain}`:
+
+* Depth is bounded (default ≤ 10) to cap evaluation cost.
+* Cycles are impossible by write-time invariant (see 5.7.3) and treated as fail-closed if encountered at read time.
+* `${requester.direct_report_ids}` is resolved on demand only when a rule explicitly references it, via `direct_report#` index.
+
 ### **9.2 Principal Scope Fetch (Current Baseline)**
 
 Fetch principal grants directly from DynamoDB:
@@ -623,8 +741,25 @@ Before evaluating a rule, the engine replaces placeholders:
 
 * `${requester.user_id}`
 * `${requester.role_ids}`
+* `${requester.primary_ou_id}`
+* `${requester.ou_path}`
+* `${requester.ou_ancestor_ids}`
+* `${requester.manager_chain}`
+* `${requester.direct_report_ids}` (resolved on demand)
 
 with real values.
+
+**Example — A user can read rows owned by anyone in their OU subtree:**
+
+```json
+{ "a": "owner.ou_path", "v": "starts_with:${requester.ou_path}" }
+```
+
+**Example — A manager can read rows owned by anyone in their reporting chain:**
+
+```json
+{ "a": "owner.user_id", "v": "in:${requester.direct_report_ids}" }
+```
 
 ### **9.5 Condition Evaluation**
 
@@ -721,6 +856,7 @@ The LTBase AAA framework:
 * Extends toward permission-profile-driven **row/column outcomes**
 * Supports both grant filters and LTBase rule syntax in policy storage
 * Expands roles hierarchically and combines role/user principals
+* Models the **organizational chart** (OU containment + manager relationship) in an Active Directory–faithful way, with policy inheritance down the OU subtree
 * Ensures AI agent safety
 * Generates complete audit trails
 
