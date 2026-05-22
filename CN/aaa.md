@@ -101,7 +101,6 @@ Authservice 会先读取目标项目范围内的外部身份查找记录。
 | access_token | string | LTBase 签发的 API 访问 JWT |
 | refresh_token | string | 用于换取新 access token |
 | api_base_url | string | 项目级 data plane base URL |
-| api_base_url | string | 项目级 data plane base URL |
 
 **错误响应：**
 
@@ -155,6 +154,7 @@ Authservice 会先读取目标项目范围内的外部身份查找记录。
 | --- | --- | --- |
 | access_token | string | LTBase 签发的 API 访问 JWT |
 | refresh_token | string | 用于换取新 access token |
+| api_base_url | string | 项目级 data plane base URL |
 
 **错误响应：**
 

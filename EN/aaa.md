@@ -154,6 +154,7 @@ Bind a third-party identity token for an LTBase user.
 | ------------- | ------ | ------------------------------------- |
 | access_token  | string | LTBase signed JWT for API access      |
 | refresh_token | string | Token for obtaining new access tokens |
+| api_base_url  | string | Project-scoped data plane base URL    |
 
 **Error Responses:**
 
