@@ -1,6 +1,6 @@
-# LTBase Data Plane API Specification (Based on the Current `cmd/api` Implementation)
+# LTBase API Specification (Data Plane + Control Plane Admin)
 
-This document describes the HTTP API behavior currently exposed by `ltbase.api/cmd/api`.
+This document describes the LTBase HTTP API surface across the current data plane implementation and the approved control-plane admin REST API contract.
 
 - Code baseline:
   - `ltbase.api/cmd/api/main.go`
@@ -10,7 +10,7 @@ This document describes the HTTP API behavior currently exposed by `ltbase.api/c
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - Document language: English
-- Updated on: 2026-04-22
+- Updated on: 2026-05-22
 
 ## 1. Overview
 
@@ -25,6 +25,12 @@ The current data plane provides the following capabilities:
 - Governance: governance views for entities, capabilities, and policies
 - Discovery: semantic graph reachability and path queries
 - Intent-to-Action Planning: intent planning, plan execution, and execution status lookup
+
+The control plane provides the following admin capabilities:
+
+- AAA configuration management for users, roles, permissions, policies, grants, binding policies, and referrals
+- organizational structure management for OUs, manager relationships, OU policy attachments, and org chart read models
+- operational action APIs under `/control-plane` for bootstrap, repair, catalog, and migration workflows
 
 ## 2. Authentication, Context, and Shared Conventions
 
@@ -101,6 +107,8 @@ Except for a few internally delegated handlers, the top-level API consistently u
 
 ## 3. Route Summary
 
+### 3.1 Data Plane Routes
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/api/ai/v1/notes` | Create a note |
@@ -135,6 +143,66 @@ Except for a few internally delegated handlers, the top-level API consistently u
 | POST | `/api/ai/v1/intent-to-action/plans` | Create an intent plan |
 | POST | `/api/ai/v1/intent-to-action/executions` | Execute a plan step |
 | GET | `/api/ai/v1/intent-to-action/executions/{execution_id}` | Retrieve execution status |
+
+### 3.2 Control Plane Admin Routes
+
+These routes are exposed from a separate control-plane API Gateway/domain.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/auth/config` | Retrieve the control-plane auth snapshot |
+| GET | `/api/v1/auth/users` | List control-plane users |
+| GET | `/api/v1/auth/users/{user_id}` | Retrieve one control-plane user |
+| PATCH | `/api/v1/auth/users/{user_id}` | Update one control-plane user |
+| PUT | `/api/v1/auth/users/{user_id}/roles/{role_id}` | Attach a role to a user |
+| DELETE | `/api/v1/auth/users/{user_id}/roles/{role_id}` | Detach a role from a user |
+| GET | `/api/v1/auth/roles` | List role profiles |
+| POST | `/api/v1/auth/roles` | Create a role profile |
+| GET | `/api/v1/auth/roles/{role_id}` | Retrieve one role profile |
+| PATCH | `/api/v1/auth/roles/{role_id}` | Update one role profile |
+| DELETE | `/api/v1/auth/roles/{role_id}` | Delete one role profile |
+| GET | `/api/v1/auth/permissions` | List permission profiles |
+| POST | `/api/v1/auth/permissions` | Create a permission profile |
+| GET | `/api/v1/auth/permissions/{permission_id}` | Retrieve one permission profile |
+| PATCH | `/api/v1/auth/permissions/{permission_id}` | Update one permission profile |
+| DELETE | `/api/v1/auth/permissions/{permission_id}` | Delete one permission profile |
+| PUT | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | Attach a permission to a role |
+| DELETE | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | Detach a permission from a role |
+| GET | `/api/v1/auth/policies` | List policy profiles |
+| POST | `/api/v1/auth/policies` | Create a policy profile |
+| GET | `/api/v1/auth/policies/{policy_id}` | Retrieve one policy profile |
+| PATCH | `/api/v1/auth/policies/{policy_id}` | Update one policy profile |
+| DELETE | `/api/v1/auth/policies/{policy_id}` | Delete one policy profile |
+| PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | Attach a policy to a user or role |
+| DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | Detach a policy from a user or role |
+| GET | `/api/v1/auth/grants` | List resource grants |
+| POST | `/api/v1/auth/grants` | Create a resource grant |
+| DELETE | `/api/v1/auth/grants/{grant_id}` | Delete a resource grant |
+| GET | `/api/v1/auth/binding-policies` | List binding policies |
+| POST | `/api/v1/auth/binding-policies` | Create a binding policy |
+| PATCH | `/api/v1/auth/binding-policies/{policy_id}` | Update a binding policy |
+| DELETE | `/api/v1/auth/binding-policies/{policy_id}` | Delete a binding policy |
+| GET | `/api/v1/auth/referrals` | List referral codes |
+| POST | `/api/v1/auth/referrals` | Create a referral code |
+| POST | `/api/v1/auth/referrals?import=1` | Import referral codes in batch |
+| PATCH | `/api/v1/auth/referrals/{code}` | Update a referral code |
+| POST | `/api/v1/auth/referrals/{code}/disable` | Disable a referral code |
+| DELETE | `/api/v1/auth/referrals/{code}` | Delete a referral code |
+| GET | `/api/v1/org/units` | List org units |
+| POST | `/api/v1/org/units` | Create an org unit |
+| GET | `/api/v1/org/units/{ou_id}` | Retrieve one org unit |
+| PATCH | `/api/v1/org/units/{ou_id}` | Update or move an org unit |
+| DELETE | `/api/v1/org/units/{ou_id}` | Delete an org unit |
+| GET | `/api/v1/org/units/{ou_id}/users` | List users assigned to an org unit |
+| PUT | `/api/v1/org/units/{ou_id}/users/{user_id}` | Move a user into an org unit |
+| GET | `/api/v1/org/units/{ou_id}/policies` | List policies attached to an org unit |
+| PUT | `/api/v1/org/units/{ou_id}/policies/{policy_id}` | Attach a policy to an org unit |
+| DELETE | `/api/v1/org/units/{ou_id}/policies/{policy_id}` | Detach a policy from an org unit |
+| GET | `/api/v1/org/users/{user_id}/manager` | Retrieve a user's direct manager |
+| PUT | `/api/v1/org/users/{user_id}/manager` | Set a user's direct manager |
+| DELETE | `/api/v1/org/users/{user_id}/manager` | Clear a user's direct manager |
+| GET | `/api/v1/org/users/{user_id}/direct-reports` | List a user's direct reports |
+| GET | `/api/v1/org/charts` | Retrieve the org chart read model |
 
 ## 4. Common Data Structures
 
@@ -1323,3 +1391,803 @@ Compared with earlier documentation based on an older handler snapshot, the curr
   - Discovery API
   - Intent-to-Action Planning API
 - The planning execution API has additional constraints around persisted plans, execution owner, and readiness or confirmation checks
+
+## 15. Control Plane Admin REST API
+
+### 15.1 Overview
+
+This section defines the approved control-plane admin REST API contract for `ltbase.api/cmd/controlplane`.
+
+Important scope notes:
+
+- The sections above describe the current `cmd/api` data plane implementation.
+- The section below describes the approved control-plane admin contract for the dedicated control-plane gateway/domain.
+- The existing `/control-plane` action API remains supported for CLI and operational workflows.
+
+Base path:
+
+- `/api/v1`
+
+Grouped namespaces:
+
+- `/api/v1/auth/...`
+- `/api/v1/org/...`
+
+### 15.2 Authentication, Scope, and Shared Conventions
+
+#### 15.2.1 Admin Authentication
+
+The control-plane admin REST API is admin-only.
+
+Requests are allowed when the caller has either:
+
+- role `role.admin`
+- permission `controlplane.admin`
+
+Unauthenticated requests return:
+
+```json
+{
+  "request_id": "req_123",
+  "code": "unauthorized",
+  "message": "admin authentication required"
+}
+```
+
+Authenticated but non-admin requests return:
+
+```json
+{
+  "request_id": "req_123",
+  "code": "forbidden",
+  "message": "admin role or permission required"
+}
+```
+
+#### 15.2.2 Project Scope
+
+LTBase currently supports single-project private deployment for the control plane.
+
+Therefore:
+
+- every control-plane admin REST request implicitly targets the deployment project from server environment configuration
+- clients must not provide `project_id` in the path, query, headers, or request body
+- the server may return `project_id` as read-only metadata in responses
+
+#### 15.2.3 Success and Error Envelopes
+
+Single-resource success shape:
+
+```json
+{
+  "request_id": "req_123",
+  "data": {}
+}
+```
+
+Collection success shape:
+
+```json
+{
+  "request_id": "req_123",
+  "items": []
+}
+```
+
+Error shape:
+
+```json
+{
+  "request_id": "req_123",
+  "code": "invalid_body",
+  "message": "invalid request body"
+}
+```
+
+#### 15.2.4 Common Status Codes
+
+- `200 OK`
+- `201 Created`
+- `204 No Content`
+- `400 Bad Request`
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Not Found`
+- `409 Conflict`
+- `500 Internal Server Error`
+
+### 15.3 Common Control Plane Data Structures
+
+#### 15.3.1 ControlPlaneUser
+
+```json
+{
+  "user_id": "user_alice",
+  "provider": "google",
+  "issuer": "https://accounts.google.com",
+  "external_sub": "provider-subject",
+  "primary_ou_id": "ou_team_android",
+  "report_to_user_id": "user_manager_1",
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000,
+  "last_login_at": 1760000005000
+}
+```
+
+#### 15.3.2 Role
+
+```json
+{
+  "role_id": "role.manager",
+  "name": "Manager",
+  "description": "People manager",
+  "parent_role_ids": ["role.employee"],
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.3 Permission
+
+```json
+{
+  "permission_id": "perm.read_own_leads",
+  "name": "Read Own Leads",
+  "description": "Allow reading leads owned by requester",
+  "rule": {
+    "l": "and",
+    "c": [
+      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
+    ]
+  },
+  "outcome": "allow_row",
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.4 Policy
+
+```json
+{
+  "policy_id": "policy.sales_read",
+  "name": "Sales Read Policy",
+  "description": "Read access for sales records",
+  "document": {
+    "statements": [
+      {
+        "effect": "allow",
+        "schema_name": "lead",
+        "ops": ["read"]
+      }
+    ]
+  },
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.5 ResourceGrant
+
+```json
+{
+  "grant_id": "grant_123",
+  "principal_type": "role",
+  "principal_id": "role.sales",
+  "schema_name": "lead",
+  "resource_id": "lead-1",
+  "filter": null,
+  "ops": ["read", "update"],
+  "source": "manual"
+}
+```
+
+#### 15.3.6 BindingPolicy
+
+```json
+{
+  "policy_id": "bind.company_email",
+  "enabled": true,
+  "priority": 10,
+  "rules": [
+    {
+      "l": "and",
+      "c": [
+        { "a": "external.email", "v": "ends_with:@company.com" }
+      ]
+    }
+  ],
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.7 Referral
+
+```json
+{
+  "code": "INVITE-2026-001",
+  "status": "available",
+  "expires_at": 1767139200000,
+  "used_at": 0,
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.8 OrgUnit
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "name": "Team Android",
+  "parent_ou_id": "ou_mobiledev",
+  "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+  "block_inheritance": false,
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.9 OUPolicyAttachment
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "policy_id": "policy.sales_read",
+  "enforced": false
+}
+```
+
+#### 15.3.10 ManagerRelationship
+
+```json
+{
+  "user_id": "user_alice",
+  "report_to_user_id": "user_manager_1",
+  "manager": {
+    "user_id": "user_manager_1",
+    "display_name": "Alice Manager"
+  }
+}
+```
+
+#### 15.3.11 OrgChart
+
+```json
+{
+  "root_ou_id": "ou_rnd",
+  "org_units": [],
+  "users": [],
+  "policy_attachments": []
+}
+```
+
+### 15.4 Auth Config Snapshot API
+
+#### `GET /api/v1/auth/config`
+
+Purpose: Retrieve the full control-plane auth configuration snapshot for admin bootstrap and inspection.
+
+Response:
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "summary": {
+      "users": 1,
+      "roles": 2,
+      "permissions": 3,
+      "policies": 1,
+      "binding_policies": 1,
+      "referrals": 5,
+      "user_roles": 2,
+      "role_permissions": 3,
+      "principal_policies": 1,
+      "grants": 2,
+      "warnings": 0
+    },
+    "users": [],
+    "roles": [],
+    "permissions": [],
+    "policies": [],
+    "binding_policies": [],
+    "referrals": [],
+    "bindings": {
+      "user_roles": [],
+      "role_permissions": [],
+      "principal_policies": []
+    },
+    "grants": [],
+    "warnings": []
+  }
+}
+```
+
+Status codes: `200`, `401`, `403`, `500`
+
+### 15.5 Auth Resource APIs
+
+#### 15.5.1 Users
+
+`GET /api/v1/auth/users`
+
+Purpose: List bound internal users.
+
+Supported query parameters:
+
+- `q`
+- `provider`
+- `ou_id`
+- `manager_user_id`
+
+`GET /api/v1/auth/users/{user_id}`
+
+Purpose: Retrieve one internal user.
+
+Response:
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user": {
+      "user_id": "user_alice",
+      "provider": "google",
+      "issuer": "https://accounts.google.com",
+      "external_sub": "provider-subject",
+      "primary_ou_id": "ou_team_android",
+      "report_to_user_id": "user_manager_1",
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000,
+      "last_login_at": 1760000005000
+    },
+    "roles": [
+      {
+        "role_id": "role.employee",
+        "name": "Employee"
+      }
+    ]
+  }
+}
+```
+
+`PATCH /api/v1/auth/users/{user_id}`
+
+Purpose: Update admin-managed user org fields.
+
+Request body:
+
+```json
+{
+  "primary_ou_id": "ou_team_android",
+  "report_to_user_id": "user_manager_1"
+}
+```
+
+Notes:
+
+- identity fields such as `provider`, `issuer`, and `external_sub` are not writable here
+
+`PUT /api/v1/auth/users/{user_id}/roles/{role_id}`
+
+Purpose: Attach a role to a user.
+
+`DELETE /api/v1/auth/users/{user_id}/roles/{role_id}`
+
+Purpose: Detach a role from a user.
+
+Status codes for user routes: `200`, `400`, `401`, `403`, `404 user_not_found`, `409`, `500`
+
+#### 15.5.2 Roles
+
+`GET /api/v1/auth/roles`
+
+Purpose: List role profiles.
+
+`POST /api/v1/auth/roles`
+
+Purpose: Create a role profile.
+
+Request body:
+
+```json
+{
+  "role_id": "role.manager",
+  "name": "Manager",
+  "description": "People manager",
+  "parent_role_ids": ["role.employee"]
+}
+```
+
+`GET /api/v1/auth/roles/{role_id}`
+
+`PATCH /api/v1/auth/roles/{role_id}`
+
+`DELETE /api/v1/auth/roles/{role_id}`
+
+Delete conflicts return `409 role_in_use`.
+
+`PUT /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+
+Purpose: Attach a permission to a role.
+
+`DELETE /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+
+Purpose: Detach a permission from a role.
+
+#### 15.5.3 Permissions
+
+`GET /api/v1/auth/permissions`
+
+Purpose: List permission profiles.
+
+`POST /api/v1/auth/permissions`
+
+Purpose: Create a permission profile.
+
+Request body:
+
+```json
+{
+  "permission_id": "perm.read_own_leads",
+  "name": "Read Own Leads",
+  "description": "Allow reading leads owned by requester",
+  "rule_json": {
+    "l": "and",
+    "c": [
+      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
+    ]
+  },
+  "outcome": "allow_row"
+}
+```
+
+`GET /api/v1/auth/permissions/{permission_id}`
+
+`PATCH /api/v1/auth/permissions/{permission_id}`
+
+`DELETE /api/v1/auth/permissions/{permission_id}`
+
+#### 15.5.4 Policies And Principal Policy Attachments
+
+`GET /api/v1/auth/policies`
+
+Purpose: List policy profiles.
+
+`POST /api/v1/auth/policies`
+
+Purpose: Create a policy profile.
+
+Request body:
+
+```json
+{
+  "policy_id": "policy.sales_read",
+  "name": "Sales Read Policy",
+  "description": "Read access for sales records",
+  "policy_document": {
+    "statements": [
+      {
+        "effect": "allow",
+        "schema_name": "lead",
+        "ops": ["read"],
+        "filter": {
+          "owner_ou_path": "starts_with:${requester.ou_path}"
+        }
+      }
+    ]
+  }
+}
+```
+
+`GET /api/v1/auth/policies/{policy_id}`
+
+`PATCH /api/v1/auth/policies/{policy_id}`
+
+`DELETE /api/v1/auth/policies/{policy_id}`
+
+`PUT /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+
+Purpose: Attach a policy to a user or role principal.
+
+Allowed `principal_type` values:
+
+- `user`
+- `role`
+
+OUs are not valid principals.
+
+`DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+
+Purpose: Detach a policy from a user or role principal.
+
+#### 15.5.5 Grants
+
+`GET /api/v1/auth/grants`
+
+Purpose: List resource grants.
+
+Supported query parameters:
+
+- `principal_type`
+- `principal_id`
+- `schema_name`
+
+`POST /api/v1/auth/grants`
+
+Purpose: Create a resource grant.
+
+Request body:
+
+```json
+{
+  "principal_type": "role",
+  "principal_id": "role.sales",
+  "schema_name": "lead",
+  "ops": ["read", "update"],
+  "filter": {
+    "owner_user_id": "eq:${requester.user_id}"
+  },
+  "source": "manual"
+}
+```
+
+Notes:
+
+- `resource_id` and `filter` are mutually exclusive
+- the response returns a server-managed `grant_id`
+
+`DELETE /api/v1/auth/grants/{grant_id}`
+
+Purpose: Delete a resource grant.
+
+#### 15.5.6 Binding Policies
+
+`GET /api/v1/auth/binding-policies`
+
+Purpose: List binding policies.
+
+`POST /api/v1/auth/binding-policies`
+
+Purpose: Create a binding policy.
+
+Request body:
+
+```json
+{
+  "policy_id": "bind.company_email",
+  "enabled": true,
+  "priority": 10,
+  "rules": [
+    {
+      "l": "and",
+      "c": [
+        { "a": "external.email", "v": "ends_with:@company.com" }
+      ]
+    }
+  ]
+}
+```
+
+`PATCH /api/v1/auth/binding-policies/{policy_id}`
+
+`DELETE /api/v1/auth/binding-policies/{policy_id}`
+
+#### 15.5.7 Referrals
+
+`GET /api/v1/auth/referrals`
+
+Purpose: List referral codes.
+
+Supported query parameters:
+
+- `status`
+- `code`
+
+`POST /api/v1/auth/referrals`
+
+Purpose: Create a single referral code.
+
+Request body:
+
+```json
+{
+  "code": "INVITE-2026-001",
+  "expires_at_ms": 1767139200000
+}
+```
+
+`POST /api/v1/auth/referrals?import=1`
+
+Purpose: Import referral codes in batch.
+
+`PATCH /api/v1/auth/referrals/{code}`
+
+Purpose: Update a referral code, typically its expiration.
+
+`POST /api/v1/auth/referrals/{code}/disable`
+
+Purpose: Disable a referral code.
+
+`DELETE /api/v1/auth/referrals/{code}`
+
+Purpose: Delete a referral code when allowed.
+
+### 15.6 Org Chart APIs
+
+The org chart model follows two independent relationships:
+
+- OU containment through `primary_ou_id`
+- manager relationship through `report_to_user_id`
+
+#### 15.6.1 Org Units
+
+`GET /api/v1/org/units`
+
+Purpose: List org units.
+
+Supported query parameters:
+
+- `parent_ou_id`
+- `tree=true`
+- `q`
+
+`POST /api/v1/org/units`
+
+Purpose: Create an org unit.
+
+Request body:
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "name": "Team Android",
+  "parent_ou_id": "ou_mobiledev",
+  "block_inheritance": false
+}
+```
+
+Notes:
+
+- clients must not send `ou_path`
+- `ou_path` is server-managed
+
+`GET /api/v1/org/units/{ou_id}`
+
+`PATCH /api/v1/org/units/{ou_id}`
+
+Purpose: Update or move an org unit.
+
+Request body example:
+
+```json
+{
+  "name": "Android Platform",
+  "parent_ou_id": "ou_mobiledev",
+  "block_inheritance": false
+}
+```
+
+`DELETE /api/v1/org/units/{ou_id}`
+
+Purpose: Delete an org unit only when it has no child OUs and no assigned users.
+
+#### 15.6.2 Org Unit Users And Policies
+
+`GET /api/v1/org/units/{ou_id}/users`
+
+Purpose: List users assigned to an org unit.
+
+Supported query parameters:
+
+- `include_subtree=true`
+
+`PUT /api/v1/org/units/{ou_id}/users/{user_id}`
+
+Purpose: Move a user into an org unit.
+
+`GET /api/v1/org/units/{ou_id}/policies`
+
+Purpose: List policies attached to an org unit.
+
+`PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+Purpose: Attach a policy to an org unit.
+
+Request body:
+
+```json
+{
+  "enforced": false
+}
+```
+
+`DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+Purpose: Detach a policy from an org unit.
+
+Notes:
+
+- OUs are not principals
+- `block_inheritance` and `enforced` are stored but ignored by the V1 evaluator
+
+#### 15.6.3 Manager APIs
+
+`GET /api/v1/org/users/{user_id}/manager`
+
+Purpose: Retrieve a user's direct manager.
+
+`PUT /api/v1/org/users/{user_id}/manager`
+
+Purpose: Set a user's direct manager.
+
+Request body:
+
+```json
+{
+  "report_to_user_id": "user_manager_1"
+}
+```
+
+`DELETE /api/v1/org/users/{user_id}/manager`
+
+Purpose: Clear a user's direct manager.
+
+`GET /api/v1/org/users/{user_id}/direct-reports`
+
+Purpose: List a user's direct reports.
+
+Supported query parameters:
+
+- `recursive=true`
+
+Cycle protection errors return `400 invalid_org_cycle`.
+
+#### 15.6.4 Org Chart Read Model
+
+`GET /api/v1/org/charts`
+
+Purpose: Retrieve a UI-friendly org chart read model.
+
+Supported query parameters:
+
+- `root_ou_id`
+- `include_users=true`
+- `include_policies=true`
+
+Response:
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "root_ou_id": "ou_rnd",
+    "org_units": [],
+    "users": [],
+    "policy_attachments": []
+  }
+}
+```
+
+### 15.7 Legacy `/control-plane` Action API Notes
+
+The REST admin API does not replace the existing action-style control-plane API.
+
+The following still remain under `/control-plane` as operational actions:
+
+- `ensure-project`
+- `repair-project`
+- `update-schema`
+- `create-permission-records`
+- `create-iam-authz-records`
+- `list-project-auth-config`
+- `migrate-project-auth-records`
+- catalog put/get actions
+- `import-referrals`
+
+Use the REST admin API for productized admin UI and automation.
+
+Use `/control-plane` for Lambda Console style operations, CLI workflows, and backend operational tasks.
