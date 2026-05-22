@@ -43,20 +43,20 @@ The authentication layer is responsible for:
 
 ### **2.2 External Identity Model**
 
-Current implementation resolves external identity by combining a project-scoped lookup item with a deterministic fallback:
+Current implementation resolves external identity by combining a project-scoped lookup record with a deterministic fallback:
 
 * `project_id`
 * `provider`
 * `issuer`
 * `sub`
 
-Authservice first tries an external lookup item under the project root partition.  
-If no lookup item exists, it derives deterministic `user_id` and reads the user profile directly.
+Authservice first tries an external lookup record scoped to the target project.  
+If no lookup record exists, it derives deterministic `user_id` and reads the user profile directly.
 
-| Item Type | Key Pattern | Purpose |
-| --------- | ----------- | ------- |
-| External Lookup | `PK: auth#project#{project_id}`<br>`SK: lookup_ext#{provider_b64}#{issuer_b64}#{sub_b64}` | Resolve external identity to internal `user_id` |
-| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | Resolve whether identity is already bound |
+| Record Type | Logical Lookup Key | Purpose |
+| ----------- | ------------------ | ------- |
+| External Lookup | `project_id + provider + issuer + sub` | Resolve external identity to internal `user_id` |
+| User Profile | `project_id + user_id` | Resolve whether identity is already bound |
 
 The user profile remains the source of truth for binding state in the current path.
 
@@ -154,6 +154,7 @@ Bind a third-party identity token for an LTBase user.
 | ------------- | ------ | ------------------------------------- |
 | access_token  | string | LTBase signed JWT for API access      |
 | refresh_token | string | Token for obtaining new access tokens |
+| api_base_url  | string | Project-scoped data plane base URL    |
 
 **Error Responses:**
 
@@ -206,21 +207,21 @@ Therefore, LTBase introduces an explicit **Identity Binding** layer between auth
 
 The internal LTBase user is the **only subject used by authorization policies**.
 
-User profile is stored as a DynamoDB item:
+User profile is stored as a control-plane auth-store record:
 
-| Item Type | Key Pattern | Core Attributes |
-| --------- | ----------- | --------------- |
-| User Profile | `PK: auth#project#{project_id}`<br>`SK: user#{user_id}` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims`, `primary_ou_id`, `report_to_user_id` |
+| Record Type | Logical Identity | Core Attributes |
+| ----------- | ---------------- | --------------- |
+| User Profile | `project_id + user_id` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims`, `primary_ou_id`, `report_to_user_id` |
 
 ### **3.3 Identity Binding Schema**
 
-LTBase authservice uses an **item-based binding model** instead of a dedicated `identity_binding` table:
+LTBase authservice uses a **logical-record binding model** instead of a dedicated `identity_binding` table:
 
-| Binding State | DynamoDB Representation |
-| ------------- | ----------------------- |
-| Unbound | No user profile item at deterministic `user_id` |
-| Bound | User profile item exists at `PK auth#project#{project_id}` + `SK user#{user_id}` |
-| Bound via code | Referral item is validated and consumed in the same transaction that creates the user profile and external lookup (optional verified-email lookup may also be written) |
+| Binding State | Auth Store Representation |
+| ------------- | ------------------------- |
+| Unbound | No user profile record exists at deterministic `user_id` within the project scope |
+| Bound | User profile record exists for `project_id + user_id` |
+| Bound via code | Referral record is validated and consumed in the same transaction that creates the user profile and external lookup (optional verified-email lookup may also be written) |
 
 This design enables:
 
@@ -228,7 +229,7 @@ This design enables:
 | --------------------------- | ------------------------------------------------------- |
 | Multi-project access        | One external identity → multiple projects               |
 | Deterministic binding state | Binding state is resolved through deterministic user key |
-| Lifecycle control           | Binding is controlled through item existence and conditional writes |
+| Lifecycle control           | Binding is controlled through record existence and conditional writes |
 
 ### **3.4 Login & Binding Flow**
 
@@ -238,7 +239,7 @@ sequenceDiagram
     participant Client
     participant AuthService
     participant SocialProvider
-    participant DynamoDB
+    participant ControlPlaneStore
     participant AuthorizationEngine
 
     Client->>AuthService: POST /api/v1/login/{provider}
@@ -246,13 +247,13 @@ sequenceDiagram
     SocialProvider-->>AuthService: Claims (sub, iss, email)
 
     AuthService->>AuthService: Normalize identity + derive deterministic user_id
-    AuthService->>DynamoDB: Get external lookup, else get user profile by deterministic user_id
+    AuthService->>ControlPlaneStore: Read external lookup, else read user profile by deterministic user_id
 
     alt Not bound
-        AuthService-->>Client: 403 IDENTITY_UNBOUND
+        AuthService-->>Client: 403 identity_unbound
         Client->>AuthService: POST /api/v1/id_bindings/{provider} (code)
-        AuthService->>DynamoDB: Validate referral + create user profile/external lookup (transaction)
-        AuthService->>DynamoDB: Optional verified email lookup write
+        AuthService->>ControlPlaneStore: Validate referral + create user profile/external lookup (transaction)
+        AuthService->>ControlPlaneStore: Optional verified email lookup write
     end
 
     AuthService->>AuthorizationEngine: Resolve roles & permissions
@@ -266,7 +267,7 @@ sequenceDiagram
 3. Authservice normalizes identity tuple and derives deterministic internal `user_id`
 4. Authservice reads user profile by deterministic `user_id`
 5. If bound → resolve roles/permissions and issue JWT pair
-6. If not bound → return `IDENTITY_UNBOUND`
+6. If not bound → return `identity_unbound`
 7. Client calls bind endpoint with referral code to create binding atomically
 
 ### **3.5 Binding Policy Model**
@@ -275,8 +276,7 @@ Binding policies reuse LTBase rule syntax and are evaluated at bind-time:
 
 > [!NOTE]
 > Current implementation (`v1`) uses referral-code validation as the binding gate.
-> The policy-driven model below is the target design.
-> Detailed implementation guidance is documented in `aaa-binding-policy-implementation.md`.
+> The policy-driven model below is the target design and is intentionally specified here at the contract level rather than as a separate backend-specific implementation document.
 
 **Invitation Code Policy:**
 
@@ -329,10 +329,10 @@ The authorization engine must ensure:
 
 ### **4.1 Current Runtime Baseline (Implemented)**
 
-The current data-plane enforcement path is IAM-style and DynamoDB-backed:
+The current data-plane enforcement path is IAM-style and backed by control-plane grant records:
 
 * Principal = requester `sub` + `role_ids` from JWT claims
-* Lookup `resource_grant` records under the project root partition
+* Lookup `resource_grant` records within the target project scope
 * Enforce operation (`create/read/update/delete`) using `ops`
 * Apply either:
   * explicit `resource_id` grants, or
@@ -365,8 +365,8 @@ This dynamic attribute model requires authorization conditions that match attrib
 
 ### **5.2 Authorization Entities**
 
-| Item Family | Purpose |
-| ----------- | ------- |
+| Record Family | Purpose |
+| ------------- | ------- |
 | `user profile` | Internal user identity subject |
 | `external lookup` | Resolve provider/issuer/sub to `user_id` |
 | `email lookup` | Resolve verified email to `user_id` |
@@ -380,7 +380,7 @@ This dynamic attribute model requires authorization conditions that match attrib
 | `permission profile` | Permission definition (`name`, `rule_json`, `outcome`) |
 | `policy profile` | IAM-style policy document (`policy_document`) |
 | `principal policy attachment` | Attach policy to principal (user/role) |
-| `resource grant` | Principal-scoped resource operation grant (`ops`, `resource_id`/`filter_json`) |
+| `resource grant` | Principal-scoped resource operation grant (`ops`, `resource_id`/`filter`) |
 | `binding policy` | Bind-time gating policy (`enabled`, `priority`, `rules`) |
 | `refresh session` | Refresh token lifecycle (issued/rotated/revoked) |
 | `session parent-child edge` | Revoke-chain traversal |
@@ -414,48 +414,48 @@ The system follows a standard **RBAC (Role-Based Access Control)** model with su
 5. **OUs** may have `policy_profile` items attached; these flow to every user whose `primary_ou_id` sits in the OU subtree
 6. **Authorization** combines grant-based scope, role-derived permissions, and OU-inherited policies
 
-### **5.4 DynamoDB Single-Table Key Definitions**
+### **5.4 Logical Auth Store Record Definitions**
 
-Identity records are stored in the shared physical table with project-scoped key namespaces:
+The AAA design depends on a logical auth store contract, not a specific physical backend. Each record family below must be addressable by project scope and must support the listed access pattern efficiently in all supported backends. Backend-specific mappings are documented in `aaa-control-plane-store-mapping.md`.
 
-| Domain | `PK` Pattern | `SK` Pattern | Notes |
-| ------ | ------------ | ------------ | ----- |
-| User profile | `auth#project#{project_id}` | `user#{user_id}` | Internal user principal |
-| External lookup | `auth#project#{project_id}` | `lookup_ext#{provider_b64}#{issuer_b64}#{sub_b64}` | Provider/issuer/sub → `user_id` |
-| Verified email lookup | `auth#project#{project_id}` | `lookup_email#{email_lower_b64}` | Optional/conditional |
-| User-role mapping | `auth#project#{project_id}` | `user_role#{user_id}#{role_id}` | Query roles by user |
-| OU profile | `auth#project#{project_id}` | `ou#{ou_id}` | `parent_ou_id`, `ou_path` (materialized), `name`, `block_inheritance` (reserved) |
-| OU user index | `auth#project#{project_id}` | `ou_user#{ou_id}#{user_id}` | Reverse index for listing users in an OU |
-| OU policy attachment | `auth#project#{project_id}` | `ou_policy#{ou_id}#{policy_id}` | Attach `policy_profile` to OU; inherits via `ou_path` |
-| Direct report index | `auth#project#{project_id}` | `direct_report#{manager_user_id}#{report_user_id}` | Reverse index of `report_to_user_id` |
-| Role profile | `auth#project#{project_id}` | `role#{role_id}` | Includes parent role |
-| Role-permission mapping | `auth#project#{project_id}` | `role_permission#{role_id}#{permission_id}` | Query permissions by role |
-| Permission profile | `auth#project#{project_id}` | `permission#{permission_id}` | Permission payload |
-| Policy profile | `auth#project#{project_id}` | `policy#{policy_id}` | IAM-style policy document |
-| Principal policy attachment | `auth#project#{project_id}` | `principal_policy#{type}#{id}#{policy_id}` | Attach policy to user/role principal |
-| Resource grant | `auth#project#{project_id}` | `grant#{type}#{id}#{schema}#{selector}` | `selector = resource#{resource_id}` or `filter#{filter_hash}` |
-| Binding policy | `auth#project#{project_id}` | `binding_policy#{policy_id}` | Bind-time policy loading |
-| Referral | `auth#project#{project_id}` | `ref#{code_b64}` | Invite validation/consumption |
-| Refresh session | `auth#project#{project_id}#session` | `session#{refresh_jti}` | Rotation/revocation state |
-| Session edge | `auth#project#{project_id}#session` | `child#{parent_jti}#{child_jti}` | Revoke-chain traversal |
-| Audit event | `auth#audit#project#{project_id}#date#{year-month-day}` | `ts#{unix_ms}#{rand}` | Time-ordered append log |
+| Record Family | Logical Identity / Access Pattern | Notes |
+| ------------- | --------------------------------- | ----- |
+| User profile | Unique by `project_id + user_id` | Internal user principal |
+| External lookup | Unique by `project_id + provider + issuer + sub` | Provider/issuer/sub -> `user_id` |
+| Verified email lookup | Unique by `project_id + email_lower` | Optional/conditional |
+| User-role mapping | List by `project_id + user_id`; unique by `project_id + user_id + role_id` | Query roles by user |
+| OU profile | Unique by `project_id + ou_id` | Includes `parent_ou_id`, `ou_path`, `name`, `block_inheritance` |
+| OU user index | List by `project_id + ou_id` | Reverse lookup for users in an OU |
+| OU policy attachment | List by `project_id + ou_id`; unique by `project_id + ou_id + policy_id` | Attach `policy_profile` to OU |
+| Direct report index | List by `project_id + manager_user_id` | Reverse lookup of `report_to_user_id` |
+| Role profile | Unique by `project_id + role_id` | Includes parent role |
+| Role-permission mapping | List by `project_id + role_id`; unique by `project_id + role_id + permission_id` | Query permissions by role |
+| Permission profile | Unique by `project_id + permission_id` | Permission payload |
+| Policy profile | Unique by `project_id + policy_id` | IAM-style policy document |
+| Principal policy attachment | List by `project_id + principal_type + principal_id` | Attach policy to user/role principal |
+| Resource grant | List by `project_id + principal_type + principal_id + schema_name` | Selector is either `resource_id` or normalized `filter_hash` |
+| Binding policy | List by `project_id` and sort by priority | Bind-time policy loading |
+| Referral | Unique by `project_id + code` | Invite validation/consumption |
+| Refresh session | Unique by `project_id + refresh_jti` | Rotation/revocation state |
+| Session edge | List by `project_id + parent_jti` | Revoke-chain traversal |
+| Audit event | Append-only by `project_id + event_time` | Time-ordered security log |
 
 ### **5.5 Project Isolation Strategy (No SQL Views)**
 
-Project isolation is implemented by **key scoping**, not SQL views:
+Project isolation is implemented by **project-scoped record ownership**, not SQL views:
 
 | Isolation Control | Description |
 | ----------------- | ----------- |
-| Static config root | Project-scoped auth configuration lives under `PK = auth#project#{project_id}` |
-| Session root | Runtime sessions live under `PK = auth#project#{project_id}#session` |
-| Lookup discipline | All authservice reads/writes include project-scoped keys |
+| Project scope | Every auth-store record belongs to exactly one `project_id` |
+| Session scope | Runtime sessions are isolated by `project_id` and session identifiers |
+| Lookup discipline | All authservice reads/writes include `project_id` in repository criteria |
 | Conditional writes | Binding/session operations use conditional or transactional writes for safety |
 
-This design removes dynamic SQL view provisioning and keeps authservice storage serverless-native.
+This design avoids dynamic SQL view provisioning and keeps the control-plane storage contract portable across backends.
 
-### **5.6 Key Normalization and Encoding Rules**
+### **5.6 Identifier Normalization and Encoding Rules**
 
-To avoid key collisions and cross-language inconsistencies, key segments must be normalized deterministically:
+To avoid collisions and cross-language inconsistencies, identifiers must be normalized deterministically before they are persisted or used in lookups:
 
 | Segment | Rule |
 | ------- | ---- |
@@ -468,9 +468,9 @@ To avoid key collisions and cross-language inconsistencies, key segments must be
 
 General rules:
 
-* All dynamic key segments are UTF-8 strings.
-* Do not use raw delimiters (`#`) inside key segments; always encode dynamic segments.
+* All dynamic identifier segments are UTF-8 strings.
 * The same normalization pipeline must be shared by read and write paths.
+* Any backend-specific encoding must be deterministic and reversible where needed.
 * Any invalid or empty normalized segment must fail fast at repository boundary.
 
 ### **5.7 Organization Structure (Org Chart)**
@@ -492,7 +492,7 @@ The OU tree is encoded with both a direct `parent_ou_id` pointer and a materiali
 ```
 ou:rnd            parent_ou_id = null      ou_path = "/{ou_rnd}"
 ou:mobiledev      parent_ou_id = ou_rnd    ou_path = "/{ou_rnd}/{ou_mobiledev}"
-ou:team_android   parent_ou_id = ou_mobile ou_path = "/{ou_rnd}/{ou_mobiledev}/{ou_team_android}"
+ou:team_android   parent_ou_id = ou_mobiledev ou_path = "/{ou_rnd}/{ou_mobiledev}/{ou_team_android}"
 ```
 
 Key properties:
@@ -504,12 +504,7 @@ Key properties:
 
 #### **5.7.2 OU Policy Inheritance (GPO-Style)**
 
-Authorization is attached to OUs only through `policy_profile` items, via an **OU policy attachment** record:
-
-```
-PK: auth#project#{project_id}
-SK: ou_policy#{ou_id}#{policy_id}
-```
+Authorization is attached to OUs only through `policy_profile` records, via an **OU policy attachment** record identified by `project_id + ou_id + policy_id`.
 
 At login, the authorization engine walks the user's `primary_ou.ou_path` from root to leaf and unions all attached policies into the effective policy set. This mirrors AD's GPO inheritance model: a policy attached at `R&D` automatically applies to every user under `R&D/MobileDev/Team_Android` without per-OU duplication.
 
@@ -527,7 +522,7 @@ The schema reserves two AD-equivalent flags. They are accepted in storage but ig
 
 #### **5.7.3 Manager Relationship**
 
-The `report_to_user_id` attribute on a user profile is a single-valued pointer to that user's direct manager. The system maintains a `direct_report#{manager_user_id}#{report_user_id}` index for fast reverse lookup.
+The `report_to_user_id` attribute on a user profile is a single-valued pointer to that user's direct manager. The system maintains a direct-report reverse lookup for fast listing by manager.
 
 * **Single-valued only.** Dotted-line / secondary managers are deliberately not modeled in the schema; express them with a dedicated Role (e.g., `Project_X_DottedReport`).
 * **Cycle prevention** is enforced at write time: a user cannot directly or transitively report to themselves.
@@ -671,7 +666,7 @@ All_Employees → Dev → Team_Android
 The engine must expand inherited roles before evaluating permissions.
 
 > [!NOTE]
-> Current implementation resolves effective roles from both JWT `role_ids` and DynamoDB `user_role_attachment`,
+> Current implementation resolves effective roles from both JWT `role_ids` and auth-store `user_role` mappings,
 > then expands `parent_role_ids` transitively from role profiles (fail-closed on data access errors).
 
 ### **9.1.1 OU Ancestor & Policy Expansion**
@@ -683,10 +678,9 @@ In addition to role expansion, the engine resolves the user's OU containment cha
 2) Load OU profile; split ou_path on "/" to derive ou_ancestor_ids
    (root → ... → primary OU).
 3) For each ou_id in ou_ancestor_ids:
-     Query PK: auth#project#{project_id}
-            SK begins_with "ou_policy#{ou_id}#"
-   Collect all referenced policy_id values.
-4) GetItem each policy_profile and union into the effective policy set.
+      List OU policy attachment records by `project_id + ou_id`.
+    Collect all referenced policy_id values.
+4) Load each `policy_profile` by `project_id + policy_id` and union into the effective policy set.
 ```
 
 Notes:
@@ -701,15 +695,15 @@ The engine walks `report_to_user_id` upward to populate `${requester.manager_cha
 
 * Depth is bounded (default ≤ 10) to cap evaluation cost.
 * Cycles are impossible by write-time invariant (see 5.7.3) and treated as fail-closed if encountered at read time.
-* `${requester.direct_report_ids}` is resolved on demand only when a rule explicitly references it, via `direct_report#` index.
+* `${requester.direct_report_ids}` is resolved on demand only when a rule explicitly references it, via the direct-report reverse lookup.
 
 ### **9.2 Principal Scope Fetch (Current Baseline)**
 
-Fetch principal grants directly from DynamoDB:
+Fetch principal grants directly from the auth store:
 
 ```text
-PK: auth#project#{project_id}
-SK begins_with "grant#{principal_type}#{principal_id}#{schema_name}#"
+List `resource_grant` records by
+`project_id + principal_type + principal_id + schema_name`.
 ```
 
 Then evaluate:
@@ -722,18 +716,14 @@ Then evaluate:
 Fetch permissions associated with all effective roles:
 
 ```text
-1) Query project root partition:
-   PK: auth#project#{project_id}
-   SK begins_with "role_permission#{role_id}#"
+1) List `role_permission` mappings by `project_id + role_id`.
 
 2) Collect unique permission_id values.
 
-3) Get each permission profile from the same project root partition:
-   PK: auth#project#{project_id}
-   SK: permission#{permission_id}
+3) Load each permission profile by `project_id + permission_id`.
 ```
 
-At runtime, this is implemented with DynamoDB `Query` + `GetItem`, then de-duplicated in memory.
+At runtime, this is implemented through backend-specific indexed reads, then de-duplicated in memory.
 
 ### **9.4 Context Expansion**
 
@@ -832,15 +822,12 @@ Authorization-relevant decisions should be logged:
 | decision  | allowed / denied              |
 | details   | Rule matched, context values  |
 
-Audit events are appended as DynamoDB items under:
-
-* `PK: auth#project#{project_id}#audit`
-* `SK: ts#{unix_ms}#{rand}`
+Audit events are appended as auth-store records in a project-scoped audit log. The store must support append-only inserts ordered by `(timestamp, tie_breaker)` so incident review and export remain stable across backends.
 
 This supports compliance and incident investigation.
 
 > [!NOTE]
-> Current implementation already records authservice audit events in this partition.
+> Current implementation already records authservice audit events through the control-plane store.
 > Data-plane authorization decision auditing is progressively aligned to the same model.
 
 ---
