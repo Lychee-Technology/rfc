@@ -319,31 +319,31 @@ sequenceDiagram
 * 用户只能看到有权查看的行（**row-level restriction**）
 * 用户只能看到有权访问的列/属性（**column/attribute-level**）
 * 策略解析或计算失败时必须 **fail-closed**
-* 权限规则可引用 EAV 中的动态实体属性
+* 策略 statement 可引用 EAV 中的动态实体属性以及 `${requester.*}` 上下文
 * 规则必须是安全、结构化的，不能允许代码注入
 
 > [!IMPORTANT]
 > **行访问 ≠ 列可见性**，二者是不同的数据治理控制层。
 
-### **4.1 当前运行时基线（已实现）**
+### **4.1 统一策略模型**
 
-当前 data-plane 执行路径采用 IAM 风格，并由 control-plane grant 记录支撑：
+所有授权都通过一个概念表达 —— `policy_profile`，其内部承载一个或多个 `statement`。每个 statement 包含：
 
-* Principal = 请求者 JWT 中的 `sub` + `role_ids`
-* 在目标项目范围内查找 `resource_grant` 记录
-* 根据 `ops` 强制校验操作（`create/read/update/delete`）
-* 支持以下 selector：
-  * 显式 `resource_id` grant
-  * 转换为 Forma 条件的 `filter` grant
-* 没有匹配 grant 时默认拒绝（fail-closed）
+* `effect` —— `allow` / `deny` / `mask`
+* `ops` —— 操作集合（`create` / `read` / `update` / `delete`）
+* `schema` —— 实体范围
+* `selector` —— 行范围（`resource_id` 列表、`filter`，或二者并集）
+* `outcome` —— 可选的列级注解（哪些属性、做什么动作）
+* `condition` —— 可选 `l/c/a/v` 谓词，针对实体属性与 `${requester.*}` 上下文求值
 
-### **4.2 集成方向（下一层）**
+Policy 可以附加到主体（`user`、`role`）和 `OU` 容器上;OU 上的附加沿 OU 子树继承（见 5.7.2）。同一个 evaluator 处理这三种附加面,并采用 **deny-overrides** 与 **mask-overrides-allow** 优先级（见 9.6）。
 
-在 resource grants 之上，LTBase 继续引入更丰富的权限语义：
+> [!NOTE]
+> 早期草案中并存的三套机制 —— `resource_grant`、`permission_profile`、`policy_profile` —— 已合并为统一 statement 模型。`resource_grant` 仅作为**物理投影**保留（见 4.2），不再是独立的逻辑概念。
 
-* `permission_profile.rule_json` 用于结构化规则逻辑
-* `permission_profile.outcome` 用于表达行/列动作语义（`allow_row`、`allow_column`、`mask_column` 等）
-* 上下文展开（`${requester.user_id}`、`${requester.role_ids}`）只在服务端执行
+### **4.2 物理优化**
+
+Auth store 可对单 statement 策略维护去规范化的投影（例如保留原 `resource_grant` 风格的索引，用于 `resource_id` / `filter` 热路径查找）作为运行时优化。这些投影是统一策略模型的**缓存**,必须与完整 statement 集合的求值结果一致。
 
 ---
 
@@ -374,43 +374,39 @@ sequenceDiagram
 | `ou user index` | 通过主 OU 反查用户 |
 | `direct report index` | 通过 manager 反查直属下属 |
 | `role profile` | 角色元数据与父角色信息 |
-| `role permission` | 角色到权限映射 |
-| `permission profile` | 权限定义（`name`, `rule_json`, `outcome`） |
-| `policy profile` | IAM 风格策略文档（`policy_document`） |
+| `policy profile` | 授权策略,包含一条或多条 `statement`（allow / deny / mask）—— 见 §6 |
 | `principal policy attachment` | 给用户/角色主体附加策略 |
-| `resource grant` | 面向主体的资源操作授权（`ops`, `resource_id` / `filter`） |
 | `binding policy` | 绑定阶段门禁策略（`enabled`, `priority`, `rules`） |
 | `refresh session` | refresh token 生命周期 |
 | `session parent-child edge` | 撤销链遍历 |
 | `referral profile` | 邀请码 / referral 校验与消费状态 |
 | `audit event` | 审计事件 |
 
-权限仍然是结构化对象，而不是 EAV 记录。项目级客户端调用仍然不能直接修改权限定义。
+Policy 仍然是结构化对象,而不是 EAV 记录。项目级客户端调用走 control-plane authz API;无法通过 data-plane EAV 路径直接修改策略文档。
 
 ### **5.3 实体关系**
 
 该系统采用标准 **RBAC（Role-Based Access Control）**，并支持层级组关系；同时用 **类 Active Directory 的组织层级** 来表达组织结构：
 
 * **User**：内部身份主体
-* **Role / Group**：权限或其他角色的集合
+* **Role / Group**：一组策略附加,以及角色继承图中的一个节点
   * Group 在语义上等价于 Role
   * **继承**：Role 可继承其他 Role（例如 `Manager` 继承 `Employee`）
-  * Role 是唯一支持跨切面 / 矩阵关系的机制
-* **Permission**：由 Logic Condition 与 Outcome 构成的访问规则
+  * Role 是唯一支持跨切面 / 矩阵关系的机制（一个用户可持有多个角色）
+* **Policy**：包含一条或多条 `statement` 的命名容器。statement 携带 `effect`（allow / deny / mask）、`ops`、`schema`、可选的 `selector` 与 `outcome`,以及可选的 `condition`（见 §6）
 * **OU（Organizational Unit）**：反映汇报与归属结构的层级容器
   * 每个用户恰好属于一个 `primary_ou_id`
   * OU 通过 `parent_ou_id` 与 materialized `ou_path` 组成树
   * **OU 不是 ACL principal**。它通过挂接 `policy_profile` 间接携带授权
-* **Manager**：用户档案上的单值 `report_to_user_id`，并通过 direct-report 反向索引支持“谁向谁汇报”查询
+* **Manager**：用户档案上的单值 `report_to_user_id`，并通过 direct-report 反向索引支持"谁向谁汇报"查询
 
 **关系流：**
 
 1. **External Identity** 被规范化成确定性内部 `user_id`，再映射为 **User Profile**
 2. **Users** 通过 `user role` 记录获得 **Roles**，并通过 `primary_ou_id` 进入一个 **OU**
-3. **Roles** 通过 `role permission` 记录关联到 **Permissions**
-4. **Principals** 还可直接挂接 `resource_grant` 与策略附件
-5. **OUs** 可挂接 `policy_profile`，并向子树用户继承
-6. **Authorization** 综合 grant 范围、角色权限与 OU 继承策略
+3. **Policy** 可以附加到 **User**、**Role** 或 **OU**,通过对应的 attachment 记录
+4. **OU 上的策略附加** 沿 `ou_path` 向 OU 子树继承
+5. **Authorization** 综合用户直接附加、角色（含继承）附加、OU 祖先附加的全部策略,并按 §9.6 的优先级合并 statement
 
 ### **5.4 逻辑 Auth Store 记录定义**
 
@@ -427,11 +423,8 @@ AAA 设计依赖一个逻辑 auth store contract，而不是具体物理后端�
 | OU policy attachment | 按 `project_id + ou_id` 列表；唯一键 `project_id + ou_id + policy_id` | OU 上挂接策略 |
 | Direct report index | 按 `project_id + manager_user_id` 列表 | 反查直属下属 |
 | Role profile | 唯一键 `project_id + role_id` | 包含父角色 |
-| Role-permission mapping | 按 `project_id + role_id` 列表；唯一键 `project_id + role_id + permission_id` | 查询角色权限 |
-| Permission profile | 唯一键 `project_id + permission_id` | 权限载荷 |
-| Policy profile | 唯一键 `project_id + policy_id` | IAM 风格策略文档 |
+| Policy profile | 唯一键 `project_id + policy_id` | 含一条或多条 `statement` 的文档（见 §6） |
 | Principal policy attachment | 按 `project_id + principal_type + principal_id` 列表 | 给 user/role 挂接策略 |
-| Resource grant | 按 `project_id + principal_type + principal_id + schema_name` 列表 | selector 为 `resource_id` 或规范化 `filter_hash` |
 | Binding policy | 按 `project_id` 列表，并按优先级排序 | bind-time 策略 |
 | Referral | 唯一键 `project_id + code` | 邀请码校验与消费 |
 | Refresh session | 唯一键 `project_id + refresh_jti` | 轮转 / 撤销状态 |
@@ -542,27 +535,47 @@ Schema 预留两个与 AD 对应的标志。它们可以存储，但 v1 evaluato
 
 ---
 
-## **6. 权限规则语法**
+## **6. Policy 与 Statement 语法**
 
-LTBase 当前使用两种结构化策略载荷：
+LTBase 把所有授权决策表达为一个 **policy**，其中包含一条或多条 **statement**。statement 是求值的最小单位。
 
-1. **Permission Rule JSON (`rule_json`)**，用于 permission profiles
-2. **Grant Filter (`filter`)**，用于 resource grants
+### **6.1 Policy 文档形态**
 
-### **6.1 Permission Rule JSON (`l/c/a/v`)**
+```json
+{
+  "policy_id": "pol_mobile_dev_read_own",
+  "name": "MobileDev — 读取自己的工单",
+  "statements": [ /* 一条或多条 statement */ ]
+}
+```
 
-Permission rules 复用 LTBase query-rule 格式：
+同一个 policy 可以混合不同的 effect（allow / deny / mask）。跨 statement、跨 policy 的合并规则定义在 §9.6。
+
+### **6.2 Statement Schema**
+
+| 字段 | 必填 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| `effect` | 是 | enum | `allow` / `deny` / `mask` |
+| `ops` | 是 | string[] | `create` / `read` / `update` / `delete` 的子集 |
+| `schema` | 是 | string | 该 statement 约束的实体 schema |
+| `selector` | `allow`/`deny` 至少需要 `resource_id` 或 `filter` 其一;`mask` 可选 | object | 行范围（见 6.4） |
+| `outcome` | `mask` 必填;`allow` 可选 | object | 列级注解（见 6.5） |
+| `condition` | 可选 | object | 额外的 `l/c/a/v` 谓词（见 6.3） |
+
+### **6.3 Condition 语法（`l/c/a/v`）**
+
+Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requester.*}` 上下文（见 §9.4）：
 
 ```json
 {
   "l": "and",
   "c": [
-    { "a": "price", "v": "gt:10" },
+    { "a": "owner", "v": "equals:${requester.user_id}" },
     {
       "l": "or",
       "c": [
         { "a": "status", "v": "equals:active" },
-        { "a": "category", "v": "starts_with:A" }
+        { "a": "priority", "v": "gt:3" }
       ]
     }
   ]
@@ -571,82 +584,142 @@ Permission rules 复用 LTBase query-rule 格式：
 
 | Key | 含义 |
 | --- | --- |
-| l | 逻辑运算符（and / or） |
-| c | 条件数组 |
-| a | 属性名 |
-| v | 带操作符前缀的值 |
+| `l` | 逻辑运算符（`and` / `or`） |
+| `c` | 条件数组 |
+| `a` | 属性名（实体属性或 `requester.*` 上下文） |
+| `v` | 带操作符前缀的值表达式 |
 
-该格式支持嵌套逻辑，可用于行级与列级条件。
+支持嵌套 `l/c`,同一份语法同时服务于行级范围和列级谓词。
 
-### **6.2 Grant Filter (`filter`)**
+### **6.4 Selector 语法**
 
-用于 grant-based 行范围控制时，可创建带 `filter` 的 `resource_grant` 记录：
+`selector` 把 statement 限定到 `schema` 中的部分行。两种形态,可叠加(并集)：
 
 ```json
 {
-  "ownerUserId": "eq:${requester.user_id}",
-  "status": "eq:open"
+  "resource_id": ["row_abc", "row_def"]
 }
 ```
 
-每个 key 是属性名；每个 value 是 data-plane filter parser 支持的带操作符表达式。  
-不要在 `create-iam-authz-records` 请求里传 `filter_json`；control plane 会忽略该字段。持久化记录内部可暴露 `filter_json` / `filter_hash`。
+```json
+{
+  "filter": {
+    "owner": "eq:${requester.user_id}",
+    "status": "eq:open"
+  }
+}
+```
+
+`filter` 中每个 key 是属性名;每个 value 是 data-plane filter parser 支持的带操作符表达式。
+
+> [!NOTE]
+> 持久化记录内部可能将 selector 暴露为 `filter_json` / `filter_hash` 以便建索引。客户端**提交**时使用上述结构形态;持久化 hash 是实现细节,**不应**出现在 `create-iam-authz-records` 请求中。
+
+### **6.5 Outcome Schema(列级)**
+
+```json
+{
+  "scope": "column",
+  "attrs": ["email", "phone"],
+  "action": "mask"
+}
+```
+
+* 当 `effect=allow` 且未指定 `outcome` 时,statement 允许对应 `ops` 下的**整行**(所有属性可读 / 可写)
+* 当 `effect=mask` 时,必须给出 `outcome.attrs` 与 `outcome.action=mask`。无论是否有匹配的 `allow`,`mask` 都对所列属性生效(见 §9.6)
+* `outcome.scope=row` 是隐含默认值,无需显式书写
+
+### **6.6 完整示例**
+
+> "MobileDev OU 的用户可读取其 OU 子树范围内所有工单;manager 还能看到其直属下属的联系方式;`ssn` 在读取时始终被掩码。"
+
+```json
+{
+  "policy_id": "pol_mobile_dev_tickets",
+  "name": "MobileDev 工单",
+  "statements": [
+    {
+      "effect": "allow",
+      "ops": ["read"],
+      "schema": "tickets",
+      "selector": { "filter": { "owner.ou_path": "starts_with:${requester.ou_path}" } }
+    },
+    {
+      "effect": "allow",
+      "ops": ["read"],
+      "schema": "tickets",
+      "selector": { "filter": { "reporter_id": "in:${requester.direct_report_ids}" } },
+      "outcome": { "scope": "column", "attrs": ["reporter_email", "reporter_phone"], "action": "allow" }
+    },
+    {
+      "effect": "mask",
+      "ops": ["read"],
+      "schema": "tickets",
+      "outcome": { "scope": "column", "attrs": ["ssn"], "action": "mask" }
+    }
+  ]
+}
+```
+
+把该 policy 通过 `ou_policy_attachment` 挂到 OU `MobileDev` 上,即可对该子树内所有用户生效。
 
 ---
 
-## **7. 行级权限**
+## **7. 行级访问控制**
 
-行级规则决定某个实体（row）是否可见或可操作。
-
-当前执行路径综合：
-
-* `resource_id` grants（显式 allow-list）
-* `filter` grants（属性条件范围）
+行级 statement 决定某个实体（row）是否可见或可操作。行范围通过 `selector`（`resource_id` 列表和/或 `filter`）表达,可选地再用 `condition` 收窄。
 
 **示例：用户只能读取自己拥有的行**
 
 ```json
 {
-  "l": "and",
-  "c": [
-    { "a": "owner", "v": "equals:${requester.user_id}" }
-  ]
+  "effect": "allow",
+  "ops": ["read"],
+  "schema": "tickets",
+  "selector": { "filter": { "owner": "eq:${requester.user_id}" } }
 }
 ```
 
-运行时，list/read 操作会先被 grant 派生出的条件约束，再去查询业务数据。
+运行时,list / read 操作会把所有 allow statement 的 selector 并集下推为 data-plane 查询谓词,再去读取业务数据;命中的 deny statement 的 selector 作为负向谓词加入。
 
 ---
 
-## **8. 列 / 属性级权限**
+## **8. 列 / 属性级访问控制**
 
-列级权限控制用户在已可访问的实体上还能读取或写入哪些字段。
+列级决策通过 statement 上的 `outcome.scope=column` 表达。`effect` 决定该属性上的行为：
 
-常见场景：
+* `effect=allow` + `outcome.scope=column` —— 把可见范围扩展到所列属性
+* `effect=mask` + `outcome.scope=column` —— 无论是否有匹配的 `allow`,都对所列属性做掩码 / 替换(mask 在属性级覆盖 allow,见 §9.6)
 
-* 用户有记录访问权，但不能看全部字段
-* 敏感字段需要隐藏或脱敏
-
-**示例：只有 manager 才能读取 email 字段**
+主体范围(哪些用户获得该行为)由**策略附加在哪个主体上**决定,而不是在 condition 里手写 role 检查。表达"manager 可读 email"的标准做法是:
 
 ```json
+// 该策略只附加在 role `Manager` 上
 {
-  "l": "and",
-  "c": [
-    { "a": "role", "v": "equals:${requester.role_ids}" },
-    { "a": "attribute_name", "v": "equals:email" }
-  ]
+  "effect": "allow",
+  "ops": ["read"],
+  "schema": "people",
+  "outcome": { "scope": "column", "attrs": ["email"], "action": "allow" }
 }
 ```
 
-该权限的 `outcome` 存在 permission profile 记录中，例如 `'allow_column'`、`'mask_column'`。
+**示例：全局对 SSN 做掩码**
+
+```json
+{
+  "effect": "mask",
+  "ops": ["read"],
+  "schema": "people",
+  "outcome": { "scope": "column", "attrs": ["ssn"], "action": "mask" }
+}
+```
 
 > [!NOTE]
-> 当前实现基线仍主要覆盖行级范围控制。列级 outcome 属于集成设计的一部分，会逐步落地。
+> 当前实现基线仍主要覆盖行级范围控制。列级 statement（`outcome.scope=column`）属于集成设计的一部分,会逐步落地。
 
 ### **数据脱敏（可选）**
 
-对敏感属性（如 SSN），可选择返回掩码值（如 `*****`），而非完全隐藏。
+对敏感属性(如 SSN),`effect=mask` 在读取时把存储值替换为掩码模式(如 `*****`),而非完全隐藏。具体替换规则属于 `outcome.action` 语义,在 schema 属性层级配置。
 
 ---
 
@@ -690,31 +763,39 @@ All_Employees -> Dev -> Team_Android
 * 若读取阶段发现环，应按 fail-closed 处理
 * `${requester.direct_report_ids}` 仅在规则显式引用时，通过 direct-report 反向查找按需解析
 
-### **9.2 主体范围抓取（当前基线）**
+### **9.2 有效策略收集**
 
-直接从 auth store 中抓取 principal grants：
-
-```text
-按 `project_id + principal_type + principal_id + schema_name`
-列出 `resource_grant` 记录
-```
-
-随后评估：
-
-* `ops` 是否兼容当前操作
-* selector 是 `resource_id` 还是 `filter`
-
-### **9.3 权限抓取（集成层）**
-
-从全部有效角色关联的权限中抓取 permission profiles：
+每次请求,引擎汇集对请求者生效的所有策略：
 
 ```text
-1) 按 `project_id + role_id` 列出 `role_permission` 映射。
-2) 收集去重后的 permission_id。
-3) 按 `project_id + permission_id` 读取 permission profile。
+1) 用户直接附加:
+     按 `project_id + principal_type=user + principal_id=user_id`
+     列出 principal_policy_attachment。
+
+2) 角色附加(对 9.1 得到的每个有效角色):
+     按 `project_id + principal_type=role + principal_id=role_id`
+     列出 principal_policy_attachment。
+
+3) OU 附加(对 9.1.1 得到的每个 ou_id):
+     按 `project_id + ou_id` 列出 ou_policy_attachment。
+
+4) 合并所有引用到的 policy_id,并按 `project_id + policy_id`
+   读取 policy_profile,去重后得到 effective policy set。
 ```
 
-运行时，具体后端可通过索引读取、批量读取等手段实现，并在内存中去重。
+结果是一个扁平、去重的策略集合,每个策略带一条或多条 statement。
+
+### **9.3 Statement 扁平化与预过滤**
+
+把所有已收集策略中的 statement 扁平为一个列表。引擎对其做预过滤：
+
+* `schema` 必须匹配当前目标 schema
+* `ops` 必须包含当前请求的操作
+
+不匹配的 statement 在条件求值前丢弃。剩余集合即为本次请求的**候选集**。
+
+> [!NOTE]
+> 像 `resource_grant` 索引这样的物理投影可用于热路径(例如 `read` 已知 `resource_id`)上的预过滤短路。这些投影产出的决策必须与对完整候选集的求值结果一致。
 
 ### **9.4 上下文展开**
 
@@ -757,6 +838,37 @@ All_Employees -> Dev -> Team_Android
 
 未解析的占位符或非法策略表达式必须 fail-closed。
 
+### **9.6 冲突解决**
+
+多条候选 statement 可能同时命中同一行或同一属性。合并遵循两条有序规则：
+
+1. **Deny overrides Allow。** 只要有任何匹配的 `effect=deny` statement 命中 `(ops, row)`,访问即被拒绝 —— 即使存在允许的 statement。
+2. **Mask overrides Allow。** 行已通过 `allow` 的行范围,但目标属性又被 `mask` statement 命中时,该属性按 `outcome.action` 进行掩码 / 替换。
+
+对单行 `r` 与操作 `op` 的判定流程：
+
+```text
+if any deny.matches(r, op):
+    result = denied
+else if any allow.matches(r, op):
+    for attr a in 请求投影:
+        if any mask.matches(r, op, a):
+            按掩码输出 a
+        else:
+            正常输出 a
+    result = allowed(可能含掩码)
+else:
+    result = denied                      # fail-closed: 无 allow 即为 deny
+```
+
+补充说明：
+
+* 单个 policy 内 statement 顺序不影响结果;优先级完全由 `effect` 决定
+* 不同 selector 的 `allow` statement **并集**其行范围
+* 不同 selector 的 `deny` statement **并集**其排除范围(任一 deny 命中即拒)
+* 不同 `outcome.attrs` 的 `mask` statement **并集**其掩码属性集合
+* OU 继承、角色继承、用户直接附加来源的 statement 平等参与,**没有**基于附加面的额外优先级
+
 ---
 
 ## **10. 查询过滤与执行**
@@ -787,13 +899,13 @@ JOIN matched_entities m ON t.ltbase_row_id = m.row_id;
 
 为防止 prompt injection 与意外提权：
 
-* 权限必须静态定义在策略存储中
-* Agent 可以请求数据，但 **不能贡献策略逻辑**
-* 规则求值必须是确定且安全的
+* Policy 必须静态定义在策略存储中
+* Agent 可以请求数据,但 **不能贡献 statement、condition 或 selector**
+* Statement 求值必须是确定且安全的
 * `${...}` 变量只允许在服务端展开
 * 非法策略载荷默认拒绝（fail-closed）
 
-这保证 Agent 永远只是请求动作，而不是生成实际策略条件。
+这保证 Agent 永远只是请求动作,而不是生成实际策略条件。
 
 ---
 
@@ -824,11 +936,11 @@ LTBase AAA 框架：
 * 清晰拆分 **Authentication**、**Identity Binding**、**Authorization**
 * 支持仅依赖社交登录的企业级入驻模型
 * 提供面向邀请、白名单、审批流的 **policy-driven identity binding**
-* 当前基线采用 fail-closed 的 **grant-based row enforcement**
-* 继续扩展到 permission-profile 驱动的 **row/column outcomes**
-* 同时支持 grant filters 与 LTBase rule syntax
-* 支持层级角色展开，并综合 role/user principal
-* 以接近 Active Directory 的方式表达组织结构与策略继承
+* 采用单一 **统一策略模型** —— 所有授权决策都通过 `policy_profile` 中的 `statement`（allow / deny / mask）表达,可附加到 user / role / OU
+* 以 **deny-overrides** + **mask-overrides-allow** 优先级合并 statement;默认 fail-closed
+* 以接近 Active Directory 的方式表达组织结构（OU 归属 + manager 关系）与 OU 子树策略继承
+* 支持层级角色展开,并把 user / role / OU 三类主体收敛到同一个 evaluator
+* 保留 `resource_grant` 等热路径投影作为内部优化,而不是独立的逻辑概念
 * 确保 AI Agent 安全
 * 生成完整审计轨迹
 

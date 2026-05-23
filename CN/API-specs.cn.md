@@ -1,6 +1,6 @@
-# LTBase Data Plane API 规格（基于 `cmd/api` 当前实现）
+# LTBase API 规格（Data Plane + Control Plane Admin）
 
-本文档描述 `ltbase.api/cmd/api` 当前实际暴露的 HTTP API 行为。
+本文档描述 LTBase 的 HTTP API：包括当前 data plane 实现，以及已批准的 control-plane admin REST API 合约。
 
 - 代码基线：
   - `ltbase.api/cmd/api/main.go`
@@ -10,7 +10,7 @@
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - 文档语言：中文
-- 更新日期：2026-04-22
+- 更新日期：2026-05-22
 
 ## 1. 总览
 
@@ -25,6 +25,12 @@
 - Governance：实体/能力/策略的治理视图
 - Discovery：语义图可达性与路径查询
 - Intent-to-Action Planning：意图规划、计划执行、执行状态查询
+
+Control plane 提供以下管理能力：
+
+- AAA 配置管理：用户、角色、权限、策略、grant、binding policy、referral
+- 组织架构管理：OU、汇报关系、OU policy attachment、org chart read model
+- `/control-plane` 下的运维 action API：bootstrap、repair、catalog、migration 等流程
 
 ## 2. 认证、上下文与公共约定
 
@@ -101,6 +107,8 @@
 
 ## 3. 路由总表
 
+### 3.1 Data Plane 路由
+
 | Method | Path | 功能 |
 | --- | --- | --- |
 | POST | `/api/ai/v1/notes` | 创建 note |
@@ -135,6 +143,66 @@
 | POST | `/api/ai/v1/intent-to-action/plans` | 创建意图计划 |
 | POST | `/api/ai/v1/intent-to-action/executions` | 执行计划步骤 |
 | GET | `/api/ai/v1/intent-to-action/executions/{execution_id}` | 查询执行状态 |
+
+### 3.2 Control Plane Admin 路由
+
+这些路由由独立的 control-plane API Gateway/domain 暴露。
+
+| Method | Path | 功能 |
+| --- | --- | --- |
+| GET | `/api/v1/auth/config` | 获取 control-plane auth 快照 |
+| GET | `/api/v1/auth/users` | 列出 control-plane 用户 |
+| GET | `/api/v1/auth/users/{user_id}` | 获取单个 control-plane 用户 |
+| PATCH | `/api/v1/auth/users/{user_id}` | 更新单个 control-plane 用户 |
+| PUT | `/api/v1/auth/users/{user_id}/roles/{role_id}` | 给用户绑定角色 |
+| DELETE | `/api/v1/auth/users/{user_id}/roles/{role_id}` | 解绑用户角色 |
+| GET | `/api/v1/auth/roles` | 列出角色配置 |
+| POST | `/api/v1/auth/roles` | 创建角色配置 |
+| GET | `/api/v1/auth/roles/{role_id}` | 获取单个角色配置 |
+| PATCH | `/api/v1/auth/roles/{role_id}` | 更新单个角色配置 |
+| DELETE | `/api/v1/auth/roles/{role_id}` | 删除单个角色配置 |
+| GET | `/api/v1/auth/permissions` | 列出权限配置 |
+| POST | `/api/v1/auth/permissions` | 创建权限配置 |
+| GET | `/api/v1/auth/permissions/{permission_id}` | 获取单个权限配置 |
+| PATCH | `/api/v1/auth/permissions/{permission_id}` | 更新单个权限配置 |
+| DELETE | `/api/v1/auth/permissions/{permission_id}` | 删除单个权限配置 |
+| PUT | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | 给角色绑定权限 |
+| DELETE | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | 解绑角色权限 |
+| GET | `/api/v1/auth/policies` | 列出策略配置 |
+| POST | `/api/v1/auth/policies` | 创建策略配置 |
+| GET | `/api/v1/auth/policies/{policy_id}` | 获取单个策略配置 |
+| PATCH | `/api/v1/auth/policies/{policy_id}` | 更新单个策略配置 |
+| DELETE | `/api/v1/auth/policies/{policy_id}` | 删除单个策略配置 |
+| PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 给 user/role 绑定策略 |
+| DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 解绑 user/role 策略 |
+| GET | `/api/v1/auth/grants` | 列出 resource grants |
+| POST | `/api/v1/auth/grants` | 创建 resource grant |
+| DELETE | `/api/v1/auth/grants/{grant_id}` | 删除 resource grant |
+| GET | `/api/v1/auth/binding-policies` | 列出 binding policies |
+| POST | `/api/v1/auth/binding-policies` | 创建 binding policy |
+| PATCH | `/api/v1/auth/binding-policies/{policy_id}` | 更新 binding policy |
+| DELETE | `/api/v1/auth/binding-policies/{policy_id}` | 删除 binding policy |
+| GET | `/api/v1/auth/referrals` | 列出 referral codes |
+| POST | `/api/v1/auth/referrals` | 创建 referral code |
+| POST | `/api/v1/auth/referrals?import=1` | 批量导入 referral codes |
+| PATCH | `/api/v1/auth/referrals/{code}` | 更新 referral code |
+| POST | `/api/v1/auth/referrals/{code}/disable` | 禁用 referral code |
+| DELETE | `/api/v1/auth/referrals/{code}` | 删除 referral code |
+| GET | `/api/v1/org/units` | 列出 OU |
+| POST | `/api/v1/org/units` | 创建 OU |
+| GET | `/api/v1/org/units/{ou_id}` | 获取单个 OU |
+| PATCH | `/api/v1/org/units/{ou_id}` | 更新或移动 OU |
+| DELETE | `/api/v1/org/units/{ou_id}` | 删除 OU |
+| GET | `/api/v1/org/units/{ou_id}/users` | 列出 OU 下用户 |
+| PUT | `/api/v1/org/units/{ou_id}/users/{user_id}` | 把用户移动到 OU |
+| GET | `/api/v1/org/units/{ou_id}/policies` | 列出 OU 上挂载的策略 |
+| PUT | `/api/v1/org/units/{ou_id}/policies/{policy_id}` | 给 OU 挂载策略 |
+| DELETE | `/api/v1/org/units/{ou_id}/policies/{policy_id}` | 解绑 OU 策略 |
+| GET | `/api/v1/org/users/{user_id}/manager` | 获取用户直属经理 |
+| PUT | `/api/v1/org/users/{user_id}/manager` | 设置用户直属经理 |
+| DELETE | `/api/v1/org/users/{user_id}/manager` | 清空用户直属经理 |
+| GET | `/api/v1/org/users/{user_id}/direct-reports` | 列出用户直属下属 |
+| GET | `/api/v1/org/charts` | 获取 org chart read model |
 
 ## 4. 通用数据结构
 
@@ -1323,3 +1391,801 @@ Discovery 请求体使用以下结构：
   - Discovery API
   - Intent-to-Action Planning API
 - Planning 执行接口存在额外的持久化计划、执行 owner、ready/confirmation 校验约束
+
+## 15. Control Plane Admin REST API
+
+### 15.1 总览
+
+本节定义 `ltbase.api/cmd/controlplane` 的 control-plane admin REST API 合约。
+
+重要范围说明：
+
+- 上面的章节描述当前 `cmd/api` 的 data plane 实现。
+- 下面的章节描述已批准的 control-plane admin API 合约，面向独立的 control-plane gateway/domain。
+- 现有的 `/control-plane` action API 仍然保留，用于 CLI 和运维流程。
+
+基础路径：
+
+- `/api/v1`
+
+分组命名空间：
+
+- `/api/v1/auth/...`
+- `/api/v1/org/...`
+
+### 15.2 认证、作用域与公共约定
+
+#### 15.2.1 Admin 鉴权
+
+control-plane admin REST API 仅允许管理员访问。
+
+请求满足以下任一条件时允许访问：
+
+- 角色 `role.admin`
+- 权限 `controlplane.admin`
+
+未认证请求返回：
+
+```json
+{
+  "request_id": "req_123",
+  "code": "unauthorized",
+  "message": "admin authentication required"
+}
+```
+
+已认证但非 admin 的请求返回：
+
+```json
+{
+  "request_id": "req_123",
+  "code": "forbidden",
+  "message": "admin role or permission required"
+}
+```
+
+#### 15.2.2 Project 作用域
+
+LTBase 当前在 control plane 上只支持单 project 私有部署。
+
+因此：
+
+- 每个 control-plane admin REST 请求都隐式作用于部署环境配置中的 project
+- 客户端不能在 path、query、header 或 body 中提供 `project_id`
+- 服务端可以在响应中返回只读的 `project_id`
+
+#### 15.2.3 成功与错误响应 envelope
+
+单资源成功响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {}
+}
+```
+
+集合成功响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": []
+}
+```
+
+错误响应：
+
+```json
+{
+  "request_id": "req_123",
+  "code": "invalid_body",
+  "message": "invalid request body"
+}
+```
+
+#### 15.2.4 常见状态码
+
+- `200 OK`
+- `201 Created`
+- `204 No Content`
+- `400 Bad Request`
+- `401 Unauthorized`
+- `403 Forbidden`
+- `404 Not Found`
+- `409 Conflict`
+- `500 Internal Server Error`
+
+### 15.3 通用 Control Plane 数据结构
+
+#### 15.3.1 ControlPlaneUser
+
+```json
+{
+  "user_id": "user_alice",
+  "provider": "google",
+  "issuer": "https://accounts.google.com",
+  "external_sub": "provider-subject",
+  "primary_ou_id": "ou_team_android",
+  "report_to_user_id": "user_manager_1",
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000,
+  "last_login_at": 1760000005000
+}
+```
+
+#### 15.3.2 Role
+
+```json
+{
+  "role_id": "role.manager",
+  "name": "Manager",
+  "description": "People manager",
+  "parent_role_ids": ["role.employee"],
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.3 Permission
+
+```json
+{
+  "permission_id": "perm.read_own_leads",
+  "name": "Read Own Leads",
+  "description": "允许读取请求者自己拥有的 leads",
+  "rule": {
+    "l": "and",
+    "c": [
+      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
+    ]
+  },
+  "outcome": "allow_row",
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.4 Policy
+
+```json
+{
+  "policy_id": "policy.sales_read",
+  "name": "Sales Read Policy",
+  "description": "销售记录读取策略",
+  "document": {
+    "statements": [
+      {
+        "effect": "allow",
+        "schema_name": "lead",
+        "ops": ["read"]
+      }
+    ]
+  },
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.5 ResourceGrant
+
+```json
+{
+  "grant_id": "grant_123",
+  "principal_type": "role",
+  "principal_id": "role.sales",
+  "schema_name": "lead",
+  "resource_id": "lead-1",
+  "filter": null,
+  "ops": ["read", "update"],
+  "source": "manual"
+}
+```
+
+#### 15.3.6 BindingPolicy
+
+```json
+{
+  "policy_id": "bind.company_email",
+  "enabled": true,
+  "priority": 10,
+  "rules": [
+    {
+      "l": "and",
+      "c": [
+        { "a": "external.email", "v": "ends_with:@company.com" }
+      ]
+    }
+  ],
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.7 Referral
+
+```json
+{
+  "code": "INVITE-2026-001",
+  "status": "available",
+  "expires_at": 1767139200000,
+  "used_at": 0,
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.8 OrgUnit
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "name": "Team Android",
+  "parent_ou_id": "ou_mobiledev",
+  "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+  "block_inheritance": false,
+  "created_at": 1760000000000,
+  "updated_at": 1760000000000
+}
+```
+
+#### 15.3.9 OUPolicyAttachment
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "policy_id": "policy.sales_read",
+  "enforced": false
+}
+```
+
+#### 15.3.10 ManagerRelationship
+
+```json
+{
+  "user_id": "user_alice",
+  "report_to_user_id": "user_manager_1",
+  "manager": {
+    "user_id": "user_manager_1",
+    "display_name": "Alice Manager"
+  }
+}
+```
+
+#### 15.3.11 OrgChart
+
+```json
+{
+  "root_ou_id": "ou_rnd",
+  "org_units": [],
+  "users": [],
+  "policy_attachments": []
+}
+```
+
+### 15.4 Auth Config Snapshot API
+
+#### `GET /api/v1/auth/config`
+
+用途：获取完整的 control-plane auth 配置快照，供管理后台初始化和检查使用。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "summary": {
+      "users": 1,
+      "roles": 2,
+      "permissions": 3,
+      "policies": 1,
+      "binding_policies": 1,
+      "referrals": 5,
+      "user_roles": 2,
+      "role_permissions": 3,
+      "principal_policies": 1,
+      "grants": 2,
+      "warnings": 0
+    },
+    "users": [],
+    "roles": [],
+    "permissions": [],
+    "policies": [],
+    "binding_policies": [],
+    "referrals": [],
+    "bindings": {
+      "user_roles": [],
+      "role_permissions": [],
+      "principal_policies": []
+    },
+    "grants": [],
+    "warnings": []
+  }
+}
+```
+
+状态码：`200`、`401`、`403`、`500`
+
+### 15.5 Auth 资源 APIs
+
+#### 15.5.1 Users
+
+`GET /api/v1/auth/users`
+
+用途：列出已绑定的内部用户。
+
+支持的 query 参数：
+
+- `q`
+- `provider`
+- `ou_id`
+- `manager_user_id`
+
+`GET /api/v1/auth/users/{user_id}`
+
+用途：获取单个内部用户。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user": {
+      "user_id": "user_alice",
+      "provider": "google",
+      "issuer": "https://accounts.google.com",
+      "external_sub": "provider-subject",
+      "primary_ou_id": "ou_team_android",
+      "report_to_user_id": "user_manager_1",
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000,
+      "last_login_at": 1760000005000
+    },
+    "roles": [
+      {
+        "role_id": "role.employee",
+        "name": "Employee"
+      }
+    ]
+  }
+}
+```
+
+`PATCH /api/v1/auth/users/{user_id}`
+
+用途：更新 admin 可管理的用户组织字段。
+
+请求体：
+
+```json
+{
+  "primary_ou_id": "ou_team_android",
+  "report_to_user_id": "user_manager_1"
+}
+```
+
+说明：
+
+- `provider`、`issuer`、`external_sub` 等身份字段不能通过该接口修改
+
+`PUT /api/v1/auth/users/{user_id}/roles/{role_id}`
+
+用途：给用户绑定角色。
+
+`DELETE /api/v1/auth/users/{user_id}/roles/{role_id}`
+
+用途：解绑用户角色。
+
+#### 15.5.2 Roles
+
+`GET /api/v1/auth/roles`
+
+用途：列出角色配置。
+
+`POST /api/v1/auth/roles`
+
+用途：创建角色配置。
+
+请求体：
+
+```json
+{
+  "role_id": "role.manager",
+  "name": "Manager",
+  "description": "People manager",
+  "parent_role_ids": ["role.employee"]
+}
+```
+
+`GET /api/v1/auth/roles/{role_id}`
+
+`PATCH /api/v1/auth/roles/{role_id}`
+
+`DELETE /api/v1/auth/roles/{role_id}`
+
+删除冲突返回 `409 role_in_use`。
+
+`PUT /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+
+用途：给角色绑定权限。
+
+`DELETE /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+
+用途：解绑角色权限。
+
+#### 15.5.3 Permissions
+
+`GET /api/v1/auth/permissions`
+
+用途：列出权限配置。
+
+`POST /api/v1/auth/permissions`
+
+用途：创建权限配置。
+
+请求体：
+
+```json
+{
+  "permission_id": "perm.read_own_leads",
+  "name": "Read Own Leads",
+  "description": "允许读取请求者自己拥有的 leads",
+  "rule_json": {
+    "l": "and",
+    "c": [
+      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
+    ]
+  },
+  "outcome": "allow_row"
+}
+```
+
+`GET /api/v1/auth/permissions/{permission_id}`
+
+`PATCH /api/v1/auth/permissions/{permission_id}`
+
+`DELETE /api/v1/auth/permissions/{permission_id}`
+
+#### 15.5.4 Policies 与 Principal Policy Attachments
+
+`GET /api/v1/auth/policies`
+
+用途：列出策略配置。
+
+`POST /api/v1/auth/policies`
+
+用途：创建策略配置。
+
+请求体：
+
+```json
+{
+  "policy_id": "policy.sales_read",
+  "name": "Sales Read Policy",
+  "description": "销售记录读取策略",
+  "policy_document": {
+    "statements": [
+      {
+        "effect": "allow",
+        "schema_name": "lead",
+        "ops": ["read"],
+        "filter": {
+          "owner_ou_path": "starts_with:${requester.ou_path}"
+        }
+      }
+    ]
+  }
+}
+```
+
+`GET /api/v1/auth/policies/{policy_id}`
+
+`PATCH /api/v1/auth/policies/{policy_id}`
+
+`DELETE /api/v1/auth/policies/{policy_id}`
+
+`PUT /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+
+用途：给 user 或 role 绑定策略。
+
+允许的 `principal_type`：
+
+- `user`
+- `role`
+
+OU 不是合法 principal。
+
+`DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+
+用途：解绑 user 或 role 的策略。
+
+#### 15.5.5 Grants
+
+`GET /api/v1/auth/grants`
+
+用途：列出 resource grants。
+
+支持的 query 参数：
+
+- `principal_type`
+- `principal_id`
+- `schema_name`
+
+`POST /api/v1/auth/grants`
+
+用途：创建 resource grant。
+
+请求体：
+
+```json
+{
+  "principal_type": "role",
+  "principal_id": "role.sales",
+  "schema_name": "lead",
+  "ops": ["read", "update"],
+  "filter": {
+    "owner_user_id": "eq:${requester.user_id}"
+  },
+  "source": "manual"
+}
+```
+
+说明：
+
+- `resource_id` 与 `filter` 互斥
+- 响应返回服务端生成的 `grant_id`
+
+`DELETE /api/v1/auth/grants/{grant_id}`
+
+用途：删除 resource grant。
+
+#### 15.5.6 Binding Policies
+
+`GET /api/v1/auth/binding-policies`
+
+用途：列出 binding policies。
+
+`POST /api/v1/auth/binding-policies`
+
+用途：创建 binding policy。
+
+请求体：
+
+```json
+{
+  "policy_id": "bind.company_email",
+  "enabled": true,
+  "priority": 10,
+  "rules": [
+    {
+      "l": "and",
+      "c": [
+        { "a": "external.email", "v": "ends_with:@company.com" }
+      ]
+    }
+  ]
+}
+```
+
+`PATCH /api/v1/auth/binding-policies/{policy_id}`
+
+`DELETE /api/v1/auth/binding-policies/{policy_id}`
+
+#### 15.5.7 Referrals
+
+`GET /api/v1/auth/referrals`
+
+用途：列出 referral codes。
+
+支持的 query 参数：
+
+- `status`
+- `code`
+
+`POST /api/v1/auth/referrals`
+
+用途：创建单个 referral code。
+
+请求体：
+
+```json
+{
+  "code": "INVITE-2026-001",
+  "expires_at_ms": 1767139200000
+}
+```
+
+`POST /api/v1/auth/referrals?import=1`
+
+用途：批量导入 referral codes。
+
+`PATCH /api/v1/auth/referrals/{code}`
+
+用途：更新 referral code，通常是过期时间。
+
+`POST /api/v1/auth/referrals/{code}/disable`
+
+用途：禁用 referral code。
+
+`DELETE /api/v1/auth/referrals/{code}`
+
+用途：在允许时删除 referral code。
+
+### 15.6 Org Chart APIs
+
+组织架构模型包含两条相互独立的关系：
+
+- 通过 `primary_ou_id` 表达 OU containment
+- 通过 `report_to_user_id` 表达 manager relationship
+
+#### 15.6.1 Org Units
+
+`GET /api/v1/org/units`
+
+用途：列出 OU。
+
+支持的 query 参数：
+
+- `parent_ou_id`
+- `tree=true`
+- `q`
+
+`POST /api/v1/org/units`
+
+用途：创建 OU。
+
+请求体：
+
+```json
+{
+  "ou_id": "ou_team_android",
+  "name": "Team Android",
+  "parent_ou_id": "ou_mobiledev",
+  "block_inheritance": false
+}
+```
+
+说明：
+
+- 客户端不能传 `ou_path`
+- `ou_path` 由服务端维护
+
+`GET /api/v1/org/units/{ou_id}`
+
+`PATCH /api/v1/org/units/{ou_id}`
+
+用途：更新或移动 OU。
+
+请求体示例：
+
+```json
+{
+  "name": "Android Platform",
+  "parent_ou_id": "ou_mobiledev",
+  "block_inheritance": false
+}
+```
+
+`DELETE /api/v1/org/units/{ou_id}`
+
+用途：仅当没有子 OU 且没有用户时删除 OU。
+
+#### 15.6.2 Org Unit Users 与 Policies
+
+`GET /api/v1/org/units/{ou_id}/users`
+
+用途：列出 OU 下的用户。
+
+支持的 query 参数：
+
+- `include_subtree=true`
+
+`PUT /api/v1/org/units/{ou_id}/users/{user_id}`
+
+用途：把用户移动到指定 OU。
+
+`GET /api/v1/org/units/{ou_id}/policies`
+
+用途：列出挂载到 OU 的策略。
+
+`PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+用途：给 OU 挂载策略。
+
+请求体：
+
+```json
+{
+  "enforced": false
+}
+```
+
+`DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+用途：解绑 OU 上的策略。
+
+说明：
+
+- OU 不是 principal
+- `block_inheritance` 与 `enforced` 在 V1 中仅存储，不参与 evaluator
+
+#### 15.6.3 Manager APIs
+
+`GET /api/v1/org/users/{user_id}/manager`
+
+用途：获取用户直属经理。
+
+`PUT /api/v1/org/users/{user_id}/manager`
+
+用途：设置用户直属经理。
+
+请求体：
+
+```json
+{
+  "report_to_user_id": "user_manager_1"
+}
+```
+
+`DELETE /api/v1/org/users/{user_id}/manager`
+
+用途：清空直属经理关系。
+
+`GET /api/v1/org/users/{user_id}/direct-reports`
+
+用途：列出用户直属下属。
+
+支持的 query 参数：
+
+- `recursive=true`
+
+循环保护错误返回 `400 invalid_org_cycle`。
+
+#### 15.6.4 Org Chart Read Model
+
+`GET /api/v1/org/charts`
+
+用途：获取管理后台友好的 org chart read model。
+
+支持的 query 参数：
+
+- `root_ou_id`
+- `include_users=true`
+- `include_policies=true`
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "root_ou_id": "ou_rnd",
+    "org_units": [],
+    "users": [],
+    "policy_attachments": []
+  }
+}
+```
+
+### 15.7 旧版 `/control-plane` Action API 说明
+
+REST admin API 不替代现有的 action-style control-plane API。
+
+以下 action 仍通过 `/control-plane` 提供：
+
+- `ensure-project`
+- `repair-project`
+- `update-schema`
+- `create-permission-records`
+- `create-iam-authz-records`
+- `list-project-auth-config`
+- `migrate-project-auth-records`
+- catalog put/get actions
+- `import-referrals`
+
+产品化管理后台与自动化配置请使用 REST admin API。
+
+Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/control-plane`。
