@@ -10,7 +10,7 @@
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - 文档语言：中文
-- 更新日期：2026-05-22
+- 更新日期：2026-05-23
 
 ## 1. 总览
 
@@ -28,7 +28,7 @@
 
 Control plane 提供以下管理能力：
 
-- AAA 配置管理：用户、角色、权限、策略、grant、binding policy、referral
+- AAA 配置管理：用户、角色、统一策略、principal policy attachment、OU policy attachment、binding policy、referral
 - 组织架构管理：OU、汇报关系、OU policy attachment、org chart read model
 - `/control-plane` 下的运维 action API：bootstrap、repair、catalog、migration 等流程
 
@@ -146,7 +146,9 @@ Control plane 提供以下管理能力：
 
 ### 3.2 Control Plane Admin 路由
 
-这些路由由独立的 control-plane API Gateway/domain 暴露。
+这些路由定义了独立 control-plane API Gateway/domain 下的已批准 control-plane admin 合约。
+
+实现采用分阶段推进。在当前分支中，已经落地的 admin REST 子集主要集中在 `GET /api/v1/auth/config` 与 referral 管理路由，其余已批准资源会逐步补齐。
 
 | Method | Path | 功能 |
 | --- | --- | --- |
@@ -161,13 +163,6 @@ Control plane 提供以下管理能力：
 | GET | `/api/v1/auth/roles/{role_id}` | 获取单个角色配置 |
 | PATCH | `/api/v1/auth/roles/{role_id}` | 更新单个角色配置 |
 | DELETE | `/api/v1/auth/roles/{role_id}` | 删除单个角色配置 |
-| GET | `/api/v1/auth/permissions` | 列出权限配置 |
-| POST | `/api/v1/auth/permissions` | 创建权限配置 |
-| GET | `/api/v1/auth/permissions/{permission_id}` | 获取单个权限配置 |
-| PATCH | `/api/v1/auth/permissions/{permission_id}` | 更新单个权限配置 |
-| DELETE | `/api/v1/auth/permissions/{permission_id}` | 删除单个权限配置 |
-| PUT | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | 给角色绑定权限 |
-| DELETE | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | 解绑角色权限 |
 | GET | `/api/v1/auth/policies` | 列出策略配置 |
 | POST | `/api/v1/auth/policies` | 创建策略配置 |
 | GET | `/api/v1/auth/policies/{policy_id}` | 获取单个策略配置 |
@@ -175,9 +170,6 @@ Control plane 提供以下管理能力：
 | DELETE | `/api/v1/auth/policies/{policy_id}` | 删除单个策略配置 |
 | PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 给 user/role 绑定策略 |
 | DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 解绑 user/role 策略 |
-| GET | `/api/v1/auth/grants` | 列出 resource grants |
-| POST | `/api/v1/auth/grants` | 创建 resource grant |
-| DELETE | `/api/v1/auth/grants/{grant_id}` | 删除 resource grant |
 | GET | `/api/v1/auth/binding-policies` | 列出 binding policies |
 | POST | `/api/v1/auth/binding-policies` | 创建 binding policy |
 | PATCH | `/api/v1/auth/binding-policies/{policy_id}` | 更新 binding policy |
@@ -1403,6 +1395,7 @@ Discovery 请求体使用以下结构：
 - 上面的章节描述当前 `cmd/api` 的 data plane 实现。
 - 下面的章节描述已批准的 control-plane admin API 合约，面向独立的 control-plane gateway/domain。
 - 现有的 `/control-plane` action API 仍然保留，用于 CLI 和运维流程。
+- control-plane REST 采用增量实现；本节列出的已批准资源路由并不表示当前分支已全部落地。
 
 基础路径：
 
@@ -1506,6 +1499,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "provider": "google",
   "issuer": "https://accounts.google.com",
   "external_sub": "provider-subject",
+  "referral_code": "INVITE-2026-001",
   "primary_ou_id": "ou_team_android",
   "report_to_user_id": "user_manager_1",
   "created_at": 1760000000000,
@@ -1513,6 +1507,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "last_login_at": 1760000005000
 }
 ```
+
+说明：
+
+- `referral_code` 属于当前 auth-config 用户快照字段。
+- `primary_ou_id` 与 `report_to_user_id` 属于已批准的组织管理合约，随着 user/org 资源接口落地，会由对应接口返回。
 
 #### 15.3.2 Role
 
@@ -1527,22 +1526,13 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.3 Permission
+#### 15.3.3 PrincipalPolicyAttachment
 
 ```json
 {
-  "permission_id": "perm.read_own_leads",
-  "name": "Read Own Leads",
-  "description": "允许读取请求者自己拥有的 leads",
-  "rule": {
-    "l": "and",
-    "c": [
-      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
-    ]
-  },
-  "outcome": "allow_row",
-  "created_at": 1760000000000,
-  "updated_at": 1760000000000
+	"principal_type": "role",
+	"principal_id": "role.sales",
+	"policy_id": "policy.sales_read"
 }
 ```
 
@@ -1557,8 +1547,13 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     "statements": [
       {
         "effect": "allow",
-        "schema_name": "lead",
-        "ops": ["read"]
+		"ops": ["read"],
+		"schema": "lead",
+		"selector": {
+		  "filter": {
+		    "owner_ou_path": "starts_with:${requester.ou_path}"
+		  }
+		}
       }
     ]
   },
@@ -1567,22 +1562,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.5 ResourceGrant
-
-```json
-{
-  "grant_id": "grant_123",
-  "principal_type": "role",
-  "principal_id": "role.sales",
-  "schema_name": "lead",
-  "resource_id": "lead-1",
-  "filter": null,
-  "ops": ["read", "update"],
-  "source": "manual"
-}
-```
-
-#### 15.3.6 BindingPolicy
+#### 15.3.5 BindingPolicy
 
 ```json
 {
@@ -1602,12 +1582,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.7 Referral
+#### 15.3.6 Referral
 
 ```json
 {
   "code": "INVITE-2026-001",
-  "status": "available",
   "expires_at": 1767139200000,
   "used_at": 0,
   "created_at": 1760000000000,
@@ -1615,7 +1594,9 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.8 OrgUnit
+说明：referral 的可用状态由 `used_at` 与 `expires_at` 推导，当前模型不要求单独存储 `status` 字段。
+
+#### 15.3.7 OrgUnit
 
 ```json
 {
@@ -1629,7 +1610,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.9 OUPolicyAttachment
+#### 15.3.8 OUPolicyAttachment
 
 ```json
 {
@@ -1639,27 +1620,26 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.10 ManagerRelationship
+#### 15.3.9 ManagerRelationship
 
 ```json
 {
   "user_id": "user_alice",
   "report_to_user_id": "user_manager_1",
   "manager": {
-    "user_id": "user_manager_1",
-    "display_name": "Alice Manager"
+    "user_id": "user_manager_1"
   }
 }
 ```
 
-#### 15.3.11 OrgChart
+#### 15.3.10 OrgChart
 
 ```json
 {
   "root_ou_id": "ou_rnd",
   "org_units": [],
   "users": [],
-  "policy_attachments": []
+  "ou_policy_attachments": []
 }
 ```
 
@@ -1668,6 +1648,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 #### `GET /api/v1/auth/config`
 
 用途：获取完整的 control-plane auth 配置快照，供管理后台初始化和检查使用。
+
+实现状态：当前分支已落地。
 
 响应：
 
@@ -1679,38 +1661,40 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     "summary": {
       "users": 1,
       "roles": 2,
-      "permissions": 3,
-      "policies": 1,
-      "binding_policies": 1,
-      "referrals": 5,
-      "user_roles": 2,
-      "role_permissions": 3,
-      "principal_policies": 1,
-      "grants": 2,
-      "warnings": 0
+		"policies": 1,
+		"binding_policies": 1,
+		"referrals": 5,
+		"principal_policies": 1,
+		"ou_policies": 1,
+		"warnings": 0
     },
     "users": [],
     "roles": [],
-    "permissions": [],
-    "policies": [],
-    "binding_policies": [],
-    "referrals": [],
-    "bindings": {
-      "user_roles": [],
-      "role_permissions": [],
-      "principal_policies": []
-    },
-    "grants": [],
-    "warnings": []
+		"policies": [],
+		"principal_policy_attachments": [],
+		"ou_policy_attachments": [],
+		"binding_policies": [],
+		"referrals": [],
+		"warnings": []
   }
 }
 ```
+
+说明：
+
+- 该快照以 policy-first 为主。统一的 `policy_profile.statements` 是规范授权模型。
+- 旧的 `permission_profile`、`role_permission` 和逻辑上的 `resource_grant` 仅作为内部兼容数据存在，不通过公开 REST API 暴露。
+- 从旧 authz 记录迁移到统一 policy 的流程通过 `/control-plane` action `migrate-authz-policy-model` 完成。
 
 状态码：`200`、`401`、`403`、`500`
 
 ### 15.5 Auth 资源 APIs
 
+下面的路由定义了已批准的 AAA 管理资源模型。在当前分支中，其中一部分资源仍在基于已落地的 snapshot 与 referral 接口逐步实现。
+
 #### 15.5.1 Users
+
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
 
 `GET /api/v1/auth/users`
 
@@ -1781,6 +1765,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 #### 15.5.2 Roles
 
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+
 `GET /api/v1/auth/roles`
 
 用途：列出角色配置。
@@ -1808,48 +1794,9 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 删除冲突返回 `409 role_in_use`。
 
-`PUT /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+#### 15.5.3 Policies 与 Policy Attachments
 
-用途：给角色绑定权限。
-
-`DELETE /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
-
-用途：解绑角色权限。
-
-#### 15.5.3 Permissions
-
-`GET /api/v1/auth/permissions`
-
-用途：列出权限配置。
-
-`POST /api/v1/auth/permissions`
-
-用途：创建权限配置。
-
-请求体：
-
-```json
-{
-  "permission_id": "perm.read_own_leads",
-  "name": "Read Own Leads",
-  "description": "允许读取请求者自己拥有的 leads",
-  "rule_json": {
-    "l": "and",
-    "c": [
-      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
-    ]
-  },
-  "outcome": "allow_row"
-}
-```
-
-`GET /api/v1/auth/permissions/{permission_id}`
-
-`PATCH /api/v1/auth/permissions/{permission_id}`
-
-`DELETE /api/v1/auth/permissions/{permission_id}`
-
-#### 15.5.4 Policies 与 Principal Policy Attachments
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
 
 `GET /api/v1/auth/policies`
 
@@ -1870,16 +1817,40 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     "statements": [
       {
         "effect": "allow",
-        "schema_name": "lead",
-        "ops": ["read"],
-        "filter": {
-          "owner_ou_path": "starts_with:${requester.ou_path}"
-        }
+		"ops": ["read"],
+		"schema": "lead",
+		"selector": {
+		  "filter": {
+		    "owner_ou_path": "starts_with:${requester.ou_path}"
+		  }
+		},
+		"condition": {
+		  "l": "and",
+		  "c": [
+		    { "a": "status", "v": "eq:open" }
+		  ]
+	  }
+	},
+	{
+		"effect": "mask",
+		"ops": ["read"],
+		"schema": "lead",
+		"outcome": {
+		  "scope": "column",
+		  "attrs": ["ssn"],
+		  "action": "mask"
+		}
       }
     ]
   }
 }
 ```
+
+说明：
+
+- `policy_document.statements` 是规范授权模型。
+- 每个 statement 可包含 `effect`、`ops`、`schema`、`selector`、`condition`、`outcome`，具体以 `rfc/EN/aaa.md` 为准。
+- `selector` 可包含 `resource_id`、`filter`，或两者同时存在。
 
 `GET /api/v1/auth/policies/{policy_id}`
 
@@ -1898,51 +1869,30 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 OU 不是合法 principal。
 
+`GET /api/v1/org/units/{ou_id}/policies`
+
+用途：列出挂载到 OU 的策略。
+
+`PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+用途：给 OU 挂载策略。
+
+`DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+用途：解绑 OU 上的策略。
+
 `DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
 
 用途：解绑 user 或 role 的策略。
 
-#### 15.5.5 Grants
+统一 AAA 合约中不存在一等 REST 资源形式的 `permission_profile` 或逻辑 `resource_grant`。
 
-`GET /api/v1/auth/grants`
+- `resource_grant` 仍可作为统一策略的内部物理投影存在。
+- 旧权限和 grants 仅作为内部兼容数据存在，不通过公开 REST API 暴露。
 
-用途：列出 resource grants。
+#### 15.5.4 Binding Policies
 
-支持的 query 参数：
-
-- `principal_type`
-- `principal_id`
-- `schema_name`
-
-`POST /api/v1/auth/grants`
-
-用途：创建 resource grant。
-
-请求体：
-
-```json
-{
-  "principal_type": "role",
-  "principal_id": "role.sales",
-  "schema_name": "lead",
-  "ops": ["read", "update"],
-  "filter": {
-    "owner_user_id": "eq:${requester.user_id}"
-  },
-  "source": "manual"
-}
-```
-
-说明：
-
-- `resource_id` 与 `filter` 互斥
-- 响应返回服务端生成的 `grant_id`
-
-`DELETE /api/v1/auth/grants/{grant_id}`
-
-用途：删除 resource grant。
-
-#### 15.5.6 Binding Policies
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
 
 `GET /api/v1/auth/binding-policies`
 
@@ -1974,7 +1924,9 @@ OU 不是合法 principal。
 
 `DELETE /api/v1/auth/binding-policies/{policy_id}`
 
-#### 15.5.7 Referrals
+#### 15.5.5 Referrals
+
+实现状态：当前分支已落地。
 
 `GET /api/v1/auth/referrals`
 
@@ -2021,7 +1973,11 @@ OU 不是合法 principal。
 - 通过 `primary_ou_id` 表达 OU containment
 - 通过 `report_to_user_id` 表达 manager relationship
 
+这些路由属于已批准的 control-plane admin 合约，可能会分阶段落地实现；字段命名与语义以 `rfc/EN/aaa.md` 为准。
+
 #### 15.6.1 Org Units
+
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
 
 `GET /api/v1/org/units`
 
@@ -2075,6 +2031,8 @@ OU 不是合法 principal。
 
 #### 15.6.2 Org Unit Users 与 Policies
 
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+
 `GET /api/v1/org/units/{ou_id}/users`
 
 用途：列出 OU 下的用户。
@@ -2114,6 +2072,8 @@ OU 不是合法 principal。
 
 #### 15.6.3 Manager APIs
 
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+
 `GET /api/v1/org/users/{user_id}/manager`
 
 用途：获取用户直属经理。
@@ -2146,6 +2106,8 @@ OU 不是合法 principal。
 
 #### 15.6.4 Org Chart Read Model
 
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+
 `GET /api/v1/org/charts`
 
 用途：获取管理后台友好的 org chart read model。
@@ -2165,7 +2127,7 @@ OU 不是合法 principal。
     "root_ou_id": "ou_rnd",
     "org_units": [],
     "users": [],
-    "policy_attachments": []
+    "ou_policy_attachments": []
   }
 }
 ```
@@ -2182,7 +2144,7 @@ REST admin API 不替代现有的 action-style control-plane API。
 - `create-permission-records`
 - `create-iam-authz-records`
 - `list-project-auth-config`
-- `migrate-project-auth-records`
+- `migrate-authz-policy-model`
 - catalog put/get actions
 - `import-referrals`
 
