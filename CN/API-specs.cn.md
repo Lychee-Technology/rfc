@@ -1562,18 +1562,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.5 LegacyAuthzSnapshot
-
-```json
-{
-	"permissions": [],
-	"user_roles": [],
-	"role_permissions": [],
-	"grants": []
-}
-```
-
-#### 15.3.6 BindingPolicy
+#### 15.3.5 BindingPolicy
 
 ```json
 {
@@ -1593,7 +1582,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.7 Referral
+#### 15.3.6 Referral
 
 ```json
 {
@@ -1607,7 +1596,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 说明：referral 的可用状态由 `used_at` 与 `expires_at` 推导，当前模型不要求单独存储 `status` 字段。
 
-#### 15.3.8 OrgUnit
+#### 15.3.7 OrgUnit
 
 ```json
 {
@@ -1621,7 +1610,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.9 OUPolicyAttachment
+#### 15.3.8 OUPolicyAttachment
 
 ```json
 {
@@ -1631,7 +1620,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.10 ManagerRelationship
+#### 15.3.9 ManagerRelationship
 
 ```json
 {
@@ -1643,7 +1632,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-#### 15.3.11 OrgChart
+#### 15.3.10 OrgChart
 
 ```json
 {
@@ -1686,12 +1675,6 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 		"ou_policy_attachments": [],
 		"binding_policies": [],
 		"referrals": [],
-		"legacy": {
-		  "permissions": [],
-		  "user_roles": [],
-		  "role_permissions": [],
-		  "grants": []
-		},
 		"warnings": []
   }
 }
@@ -1700,7 +1683,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 说明：
 
 - 该快照以 policy-first 为主。统一的 `policy_profile.statements` 是规范授权模型。
-- 旧的 `permission_profile`、`role_permission` 和逻辑上的 `resource_grant` 仅可在 `data.legacy` 中作为诊断或迁移信息出现。
+- 旧的 `permission_profile`、`role_permission` 和逻辑上的 `resource_grant` 仅作为内部兼容数据存在，不通过公开 REST API 暴露。
+- 从旧 authz 记录迁移到统一 policy 的流程通过 `/control-plane` action `migrate-authz-policy-model` 完成。
 
 状态码：`200`、`401`、`403`、`500`
 
@@ -1904,7 +1888,7 @@ OU 不是合法 principal。
 统一 AAA 合约中不存在一等 REST 资源形式的 `permission_profile` 或逻辑 `resource_grant`。
 
 - `resource_grant` 仍可作为统一策略的内部物理投影存在。
-- 旧权限和 grants 仅能通过 `GET /api/v1/auth/config` 的 `data.legacy` 暴露。
+- 旧权限和 grants 仅作为内部兼容数据存在，不通过公开 REST API 暴露。
 
 #### 15.5.4 Binding Policies
 

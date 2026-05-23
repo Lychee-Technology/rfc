@@ -1562,18 +1562,7 @@ Notes:
 }
 ```
 
-#### 15.3.5 LegacyAuthzSnapshot
-
-```json
-{
-	"permissions": [],
-	"user_roles": [],
-	"role_permissions": [],
-	"grants": []
-}
-```
-
-#### 15.3.6 BindingPolicy
+#### 15.3.5 BindingPolicy
 
 ```json
 {
@@ -1593,7 +1582,7 @@ Notes:
 }
 ```
 
-#### 15.3.7 Referral
+#### 15.3.6 Referral
 
 ```json
 {
@@ -1607,7 +1596,7 @@ Notes:
 
 Note: referral availability is derived from `used_at` and `expires_at`; the current model does not require a stored `status` field.
 
-#### 15.3.8 OrgUnit
+#### 15.3.7 OrgUnit
 
 ```json
 {
@@ -1621,7 +1610,7 @@ Note: referral availability is derived from `used_at` and `expires_at`; the curr
 }
 ```
 
-#### 15.3.9 OUPolicyAttachment
+#### 15.3.8 OUPolicyAttachment
 
 ```json
 {
@@ -1631,7 +1620,7 @@ Note: referral availability is derived from `used_at` and `expires_at`; the curr
 }
 ```
 
-#### 15.3.10 ManagerRelationship
+#### 15.3.9 ManagerRelationship
 
 ```json
 {
@@ -1643,7 +1632,7 @@ Note: referral availability is derived from `used_at` and `expires_at`; the curr
 }
 ```
 
-#### 15.3.11 OrgChart
+#### 15.3.10 OrgChart
 
 ```json
 {
@@ -1686,12 +1675,6 @@ Response:
 		"ou_policy_attachments": [],
 		"binding_policies": [],
 		"referrals": [],
-		"legacy": {
-		  "permissions": [],
-		  "user_roles": [],
-		  "role_permissions": [],
-		  "grants": []
-		},
 		"warnings": []
   }
 }
@@ -1700,7 +1683,8 @@ Response:
 Notes:
 
 - The snapshot is policy-first. Unified `policy_profile.statements` are the canonical authorization model.
-- Legacy `permission_profile`, `role_permission`, and logical `resource_grant` data may appear only under `data.legacy` for diagnostics or migration workflows.
+- Legacy `permission_profile`, `role_permission`, and logical `resource_grant` data remain internal compatibility concerns and are not exposed through public REST APIs.
+- Migration from legacy authz records to unified policies is handled through the `/control-plane` action `migrate-authz-policy-model`.
 
 Status codes: `200`, `401`, `403`, `500`
 
@@ -1906,7 +1890,7 @@ Purpose: Detach a policy from a user or role principal.
 There is no first-class REST resource for `permission_profile` or logical `resource_grant` in the approved unified AAA contract.
 
 - `resource_grant` may still exist as an internal physical projection of unified policies.
-- Legacy permissions and grants may be surfaced only inside `GET /api/v1/auth/config` under `data.legacy`.
+- Legacy permissions and grants remain internal compatibility data and are not exposed through public REST APIs.
 
 #### 15.5.4 Binding Policies
 
