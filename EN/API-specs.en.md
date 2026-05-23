@@ -10,7 +10,7 @@ This document describes the LTBase HTTP API surface across the current data plan
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - Document language: English
-- Updated on: 2026-05-22
+- Updated on: 2026-05-23
 
 ## 1. Overview
 
@@ -28,7 +28,7 @@ The current data plane provides the following capabilities:
 
 The control plane provides the following admin capabilities:
 
-- AAA configuration management for users, roles, permissions, policies, grants, binding policies, and referrals
+- AAA configuration management for users, roles, unified policies, principal policy attachments, OU policy attachments, binding policies, and referrals
 - organizational structure management for OUs, manager relationships, OU policy attachments, and org chart read models
 - operational action APIs under `/control-plane` for bootstrap, repair, catalog, and migration workflows
 
@@ -146,7 +146,9 @@ Except for a few internally delegated handlers, the top-level API consistently u
 
 ### 3.2 Control Plane Admin Routes
 
-These routes are exposed from a separate control-plane API Gateway/domain.
+These routes define the approved control-plane admin contract for a separate control-plane API Gateway/domain.
+
+Implementation is incremental. In the current branch, the already-landed admin REST subset is centered on `GET /api/v1/auth/config` and referral management routes, while the remaining approved resources are added over time.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -161,13 +163,6 @@ These routes are exposed from a separate control-plane API Gateway/domain.
 | GET | `/api/v1/auth/roles/{role_id}` | Retrieve one role profile |
 | PATCH | `/api/v1/auth/roles/{role_id}` | Update one role profile |
 | DELETE | `/api/v1/auth/roles/{role_id}` | Delete one role profile |
-| GET | `/api/v1/auth/permissions` | List permission profiles |
-| POST | `/api/v1/auth/permissions` | Create a permission profile |
-| GET | `/api/v1/auth/permissions/{permission_id}` | Retrieve one permission profile |
-| PATCH | `/api/v1/auth/permissions/{permission_id}` | Update one permission profile |
-| DELETE | `/api/v1/auth/permissions/{permission_id}` | Delete one permission profile |
-| PUT | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | Attach a permission to a role |
-| DELETE | `/api/v1/auth/roles/{role_id}/permissions/{permission_id}` | Detach a permission from a role |
 | GET | `/api/v1/auth/policies` | List policy profiles |
 | POST | `/api/v1/auth/policies` | Create a policy profile |
 | GET | `/api/v1/auth/policies/{policy_id}` | Retrieve one policy profile |
@@ -175,9 +170,6 @@ These routes are exposed from a separate control-plane API Gateway/domain.
 | DELETE | `/api/v1/auth/policies/{policy_id}` | Delete one policy profile |
 | PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | Attach a policy to a user or role |
 | DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | Detach a policy from a user or role |
-| GET | `/api/v1/auth/grants` | List resource grants |
-| POST | `/api/v1/auth/grants` | Create a resource grant |
-| DELETE | `/api/v1/auth/grants/{grant_id}` | Delete a resource grant |
 | GET | `/api/v1/auth/binding-policies` | List binding policies |
 | POST | `/api/v1/auth/binding-policies` | Create a binding policy |
 | PATCH | `/api/v1/auth/binding-policies/{policy_id}` | Update a binding policy |
@@ -1403,6 +1395,7 @@ Important scope notes:
 - The sections above describe the current `cmd/api` data plane implementation.
 - The section below describes the approved control-plane admin contract for the dedicated control-plane gateway/domain.
 - The existing `/control-plane` action API remains supported for CLI and operational workflows.
+- Control-plane REST implementation is incremental; not every approved resource route in this section is already landed in the current branch.
 
 Base path:
 
@@ -1506,6 +1499,7 @@ Error shape:
   "provider": "google",
   "issuer": "https://accounts.google.com",
   "external_sub": "provider-subject",
+  "referral_code": "INVITE-2026-001",
   "primary_ou_id": "ou_team_android",
   "report_to_user_id": "user_manager_1",
   "created_at": 1760000000000,
@@ -1513,6 +1507,11 @@ Error shape:
   "last_login_at": 1760000005000
 }
 ```
+
+Notes:
+
+- `referral_code` is part of the current auth-config user snapshot shape.
+- `primary_ou_id` and `report_to_user_id` belong to the approved org-management contract and may be surfaced by user/org resource endpoints as that surface is implemented.
 
 #### 15.3.2 Role
 
@@ -1527,22 +1526,13 @@ Error shape:
 }
 ```
 
-#### 15.3.3 Permission
+#### 15.3.3 PrincipalPolicyAttachment
 
 ```json
 {
-  "permission_id": "perm.read_own_leads",
-  "name": "Read Own Leads",
-  "description": "Allow reading leads owned by requester",
-  "rule": {
-    "l": "and",
-    "c": [
-      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
-    ]
-  },
-  "outcome": "allow_row",
-  "created_at": 1760000000000,
-  "updated_at": 1760000000000
+	"principal_type": "role",
+	"principal_id": "role.sales",
+	"policy_id": "policy.sales_read"
 }
 ```
 
@@ -1557,8 +1547,13 @@ Error shape:
     "statements": [
       {
         "effect": "allow",
-        "schema_name": "lead",
-        "ops": ["read"]
+		"ops": ["read"],
+		"schema": "lead",
+		"selector": {
+		  "filter": {
+		    "owner_ou_path": "starts_with:${requester.ou_path}"
+		  }
+		}
       }
     ]
   },
@@ -1567,18 +1562,14 @@ Error shape:
 }
 ```
 
-#### 15.3.5 ResourceGrant
+#### 15.3.5 LegacyAuthzSnapshot
 
 ```json
 {
-  "grant_id": "grant_123",
-  "principal_type": "role",
-  "principal_id": "role.sales",
-  "schema_name": "lead",
-  "resource_id": "lead-1",
-  "filter": null,
-  "ops": ["read", "update"],
-  "source": "manual"
+	"permissions": [],
+	"user_roles": [],
+	"role_permissions": [],
+	"grants": []
 }
 ```
 
@@ -1607,13 +1598,14 @@ Error shape:
 ```json
 {
   "code": "INVITE-2026-001",
-  "status": "available",
   "expires_at": 1767139200000,
   "used_at": 0,
   "created_at": 1760000000000,
   "updated_at": 1760000000000
 }
 ```
+
+Note: referral availability is derived from `used_at` and `expires_at`; the current model does not require a stored `status` field.
 
 #### 15.3.8 OrgUnit
 
@@ -1646,8 +1638,7 @@ Error shape:
   "user_id": "user_alice",
   "report_to_user_id": "user_manager_1",
   "manager": {
-    "user_id": "user_manager_1",
-    "display_name": "Alice Manager"
+    "user_id": "user_manager_1"
   }
 }
 ```
@@ -1659,7 +1650,7 @@ Error shape:
   "root_ou_id": "ou_rnd",
   "org_units": [],
   "users": [],
-  "policy_attachments": []
+  "ou_policy_attachments": []
 }
 ```
 
@@ -1668,6 +1659,8 @@ Error shape:
 #### `GET /api/v1/auth/config`
 
 Purpose: Retrieve the full control-plane auth configuration snapshot for admin bootstrap and inspection.
+
+Implementation status: landed in the current branch.
 
 Response:
 
@@ -1679,38 +1672,45 @@ Response:
     "summary": {
       "users": 1,
       "roles": 2,
-      "permissions": 3,
-      "policies": 1,
-      "binding_policies": 1,
-      "referrals": 5,
-      "user_roles": 2,
-      "role_permissions": 3,
-      "principal_policies": 1,
-      "grants": 2,
-      "warnings": 0
+		"policies": 1,
+		"binding_policies": 1,
+		"referrals": 5,
+		"principal_policies": 1,
+		"ou_policies": 1,
+		"warnings": 0
     },
     "users": [],
     "roles": [],
-    "permissions": [],
-    "policies": [],
-    "binding_policies": [],
-    "referrals": [],
-    "bindings": {
-      "user_roles": [],
-      "role_permissions": [],
-      "principal_policies": []
-    },
-    "grants": [],
-    "warnings": []
+		"policies": [],
+		"principal_policy_attachments": [],
+		"ou_policy_attachments": [],
+		"binding_policies": [],
+		"referrals": [],
+		"legacy": {
+		  "permissions": [],
+		  "user_roles": [],
+		  "role_permissions": [],
+		  "grants": []
+		},
+		"warnings": []
   }
 }
 ```
+
+Notes:
+
+- The snapshot is policy-first. Unified `policy_profile.statements` are the canonical authorization model.
+- Legacy `permission_profile`, `role_permission`, and logical `resource_grant` data may appear only under `data.legacy` for diagnostics or migration workflows.
 
 Status codes: `200`, `401`, `403`, `500`
 
 ### 15.5 Auth Resource APIs
 
+The routes below define the approved AAA admin resource model. In the current branch, some of these resources are still being implemented behind the already-landed snapshot and referral endpoints.
+
 #### 15.5.1 Users
+
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
 
 `GET /api/v1/auth/users`
 
@@ -1783,6 +1783,8 @@ Status codes for user routes: `200`, `400`, `401`, `403`, `404 user_not_found`, 
 
 #### 15.5.2 Roles
 
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
+
 `GET /api/v1/auth/roles`
 
 Purpose: List role profiles.
@@ -1810,48 +1812,9 @@ Request body:
 
 Delete conflicts return `409 role_in_use`.
 
-`PUT /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
+#### 15.5.3 Policies And Policy Attachments
 
-Purpose: Attach a permission to a role.
-
-`DELETE /api/v1/auth/roles/{role_id}/permissions/{permission_id}`
-
-Purpose: Detach a permission from a role.
-
-#### 15.5.3 Permissions
-
-`GET /api/v1/auth/permissions`
-
-Purpose: List permission profiles.
-
-`POST /api/v1/auth/permissions`
-
-Purpose: Create a permission profile.
-
-Request body:
-
-```json
-{
-  "permission_id": "perm.read_own_leads",
-  "name": "Read Own Leads",
-  "description": "Allow reading leads owned by requester",
-  "rule_json": {
-    "l": "and",
-    "c": [
-      { "a": "owner_user_id", "v": "equals:${requester.user_id}" }
-    ]
-  },
-  "outcome": "allow_row"
-}
-```
-
-`GET /api/v1/auth/permissions/{permission_id}`
-
-`PATCH /api/v1/auth/permissions/{permission_id}`
-
-`DELETE /api/v1/auth/permissions/{permission_id}`
-
-#### 15.5.4 Policies And Principal Policy Attachments
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
 
 `GET /api/v1/auth/policies`
 
@@ -1872,16 +1835,40 @@ Request body:
     "statements": [
       {
         "effect": "allow",
-        "schema_name": "lead",
-        "ops": ["read"],
-        "filter": {
-          "owner_ou_path": "starts_with:${requester.ou_path}"
-        }
+		"ops": ["read"],
+		"schema": "lead",
+		"selector": {
+		  "filter": {
+		    "owner_ou_path": "starts_with:${requester.ou_path}"
+		  }
+		},
+		"condition": {
+		  "l": "and",
+		  "c": [
+		    { "a": "status", "v": "eq:open" }
+		  ]
+		}
+	  },
+	  {
+		"effect": "mask",
+		"ops": ["read"],
+		"schema": "lead",
+		"outcome": {
+		  "scope": "column",
+		  "attrs": ["ssn"],
+		  "action": "mask"
+		}
       }
     ]
   }
 }
 ```
+
+Notes:
+
+- `policy_document.statements` is the canonical authorization model.
+- Each statement may include `effect`, `ops`, `schema`, `selector`, `condition`, and `outcome` as defined in `rfc/EN/aaa.md`.
+- `selector` may include `resource_id`, `filter`, or both.
 
 `GET /api/v1/auth/policies/{policy_id}`
 
@@ -1900,51 +1887,30 @@ Allowed `principal_type` values:
 
 OUs are not valid principals.
 
+`GET /api/v1/org/units/{ou_id}/policies`
+
+Purpose: List policies attached to an org unit.
+
+`PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+Purpose: Attach a policy to an org unit.
+
+`DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
+
+Purpose: Detach a policy from an org unit.
+
 `DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
 
 Purpose: Detach a policy from a user or role principal.
 
-#### 15.5.5 Grants
+There is no first-class REST resource for `permission_profile` or logical `resource_grant` in the approved unified AAA contract.
 
-`GET /api/v1/auth/grants`
+- `resource_grant` may still exist as an internal physical projection of unified policies.
+- Legacy permissions and grants may be surfaced only inside `GET /api/v1/auth/config` under `data.legacy`.
 
-Purpose: List resource grants.
+#### 15.5.4 Binding Policies
 
-Supported query parameters:
-
-- `principal_type`
-- `principal_id`
-- `schema_name`
-
-`POST /api/v1/auth/grants`
-
-Purpose: Create a resource grant.
-
-Request body:
-
-```json
-{
-  "principal_type": "role",
-  "principal_id": "role.sales",
-  "schema_name": "lead",
-  "ops": ["read", "update"],
-  "filter": {
-    "owner_user_id": "eq:${requester.user_id}"
-  },
-  "source": "manual"
-}
-```
-
-Notes:
-
-- `resource_id` and `filter` are mutually exclusive
-- the response returns a server-managed `grant_id`
-
-`DELETE /api/v1/auth/grants/{grant_id}`
-
-Purpose: Delete a resource grant.
-
-#### 15.5.6 Binding Policies
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
 
 `GET /api/v1/auth/binding-policies`
 
@@ -1976,7 +1942,9 @@ Request body:
 
 `DELETE /api/v1/auth/binding-policies/{policy_id}`
 
-#### 15.5.7 Referrals
+#### 15.5.5 Referrals
+
+Implementation status: landed in the current branch.
 
 `GET /api/v1/auth/referrals`
 
@@ -2023,7 +1991,11 @@ The org chart model follows two independent relationships:
 - OU containment through `primary_ou_id`
 - manager relationship through `report_to_user_id`
 
+These routes are part of the approved control-plane admin contract and may be implemented incrementally. Field names and semantics follow `rfc/EN/aaa.md`.
+
 #### 15.6.1 Org Units
+
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
 
 `GET /api/v1/org/units`
 
@@ -2077,6 +2049,8 @@ Purpose: Delete an org unit only when it has no child OUs and no assigned users.
 
 #### 15.6.2 Org Unit Users And Policies
 
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
+
 `GET /api/v1/org/units/{ou_id}/users`
 
 Purpose: List users assigned to an org unit.
@@ -2116,6 +2090,8 @@ Notes:
 
 #### 15.6.3 Manager APIs
 
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
+
 `GET /api/v1/org/users/{user_id}/manager`
 
 Purpose: Retrieve a user's direct manager.
@@ -2148,6 +2124,8 @@ Cycle protection errors return `400 invalid_org_cycle`.
 
 #### 15.6.4 Org Chart Read Model
 
+Implementation status: approved contract, not yet landed as a `/api/v1` UI route in the current branch.
+
 `GET /api/v1/org/charts`
 
 Purpose: Retrieve a UI-friendly org chart read model.
@@ -2167,7 +2145,7 @@ Response:
     "root_ou_id": "ou_rnd",
     "org_units": [],
     "users": [],
-    "policy_attachments": []
+    "ou_policy_attachments": []
   }
 }
 ```
@@ -2184,7 +2162,7 @@ The following still remain under `/control-plane` as operational actions:
 - `create-permission-records`
 - `create-iam-authz-records`
 - `list-project-auth-config`
-- `migrate-project-auth-records`
+- `migrate-authz-policy-model`
 - catalog put/get actions
 - `import-referrals`
 
