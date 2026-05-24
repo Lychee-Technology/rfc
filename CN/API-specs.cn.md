@@ -223,6 +223,7 @@ Control plane 提供以下管理能力：
   "models": [
     {
       "type": "lead",
+      "row_id": "6c11d4dd-c5f6-4b8d-b6aa-3c4ce8d8b391",
       "data": {
         "source": "note"
       }
@@ -235,6 +236,7 @@ Control plane 提供以下管理能力：
 
 - `compression`、`s3_key` 仅在对应存储路径下出现
 - `models` 为结构化抽取结果或持久化回显
+- `models[].row_id` 会在对应 model 成功持久化到 Forma 后出现
 
 ### 4.3 ModelSyncStatus
 
@@ -437,6 +439,7 @@ Control plane 提供以下管理能力：
   "models": [
     {
       "type": "lead",
+      "row_id": "6c11d4dd-c5f6-4b8d-b6aa-3c4ce8d8b391",
       "data": {
         "summary": "客户计划下周末带家人看房。",
         "raw_type": "text/plain"
@@ -461,6 +464,11 @@ Control plane 提供以下管理能力：
 - `500`：仓储写入失败
 - `502`：摘要生成失败
 - `503`：schema registry、Forma manager 等依赖未配置
+
+补充说明：
+
+- 当 model 持久化成功后，响应中的 `models[]` 会包含对应 Forma 实体的 `row_id`。
+- 若 model sync 仍为 `pending`，或本次未请求 `models`，则 `models[].row_id` 可以不存在。
 
 ### 5.3 `GET /api/ai/v1/notes`
 
