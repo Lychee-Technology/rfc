@@ -13,6 +13,6 @@ This index points to the split LTBase API specification documents by service.
 
 ## Recommended Reading Order
 
-1. `API-specs-data-plane.en.md`
-2. `API-specs-auth-service.en.md`
-3. `API-specs-control-plane.en.md`
+1. [Data Plane APIs](API-specs-data-plane.en.md)
+2. [Auth Service APIs](API-specs-auth-service.en.md)
+3. [Control Plane APIs](API-specs-control-plane.en.md)

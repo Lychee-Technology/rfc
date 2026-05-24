@@ -13,6 +13,6 @@
 
 ## 推荐阅读顺序
 
-1. `API-specs-data-plane.cn.md`
-2. `API-specs-auth-service.cn.md`
-3. `API-specs-control-plane.cn.md`
+1. [Data Plane APIs](API-specs-data-plane.cn.md)
+2. [Auth Service APIs](API-specs-auth-service.cn.md)
+3. [Control Plane APIs](API-specs-control-plane.cn.md)
