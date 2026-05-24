@@ -223,6 +223,7 @@ Implementation is incremental. In the current branch, the already-landed admin R
   "models": [
     {
       "type": "lead",
+      "row_id": "6c11d4dd-c5f6-4b8d-b6aa-3c4ce8d8b391",
       "data": {
         "source": "note"
       }
@@ -235,6 +236,7 @@ Notes:
 
 - `compression` and `s3_key` appear only when that storage path is used.
 - `models` contains structured extraction results or persisted echo-back data.
+- `models[].row_id` appears when the model has been persisted successfully into Forma.
 
 ### 4.3 ModelSyncStatus
 
@@ -437,6 +439,7 @@ Successful response: `201 Created`
   "models": [
     {
       "type": "lead",
+      "row_id": "6c11d4dd-c5f6-4b8d-b6aa-3c4ce8d8b391",
       "data": {
         "summary": "The customer plans to take the family to view homes next weekend.",
         "raw_type": "text/plain"
@@ -461,6 +464,11 @@ Status codes:
 - `500`: repository write failed
 - `502`: summary generation failed
 - `503`: dependencies such as the schema registry or Forma manager are not configured
+
+Additional notes:
+
+- When model persistence succeeds, the response `models[]` entries include the persisted Forma `row_id`.
+- If model sync remains `pending` or no models were requested, `models[].row_id` may be absent.
 
 ### 5.3 `GET /api/ai/v1/notes`
 
