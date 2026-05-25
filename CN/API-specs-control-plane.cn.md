@@ -214,6 +214,12 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+说明：
+
+- `policy_attachments` 是 org-chart read model 使用的字段名。
+- 在 V1 中，这里的条目当前是 OU policy attachment 记录，例如 `{ "ou_id": "...", "policy_id": "...", "enforced": false }`。
+- 这与 auth-config 快照中的 `ou_policy_attachments` 是有意区分的，因为 org-chart 响应是面向 UI 的聚合读模型，不是快照字段的直接搬运。
+
 ## 5. 组织架构语义与约束
 
 组织架构模型包含两条相互独立的关系：
@@ -575,6 +581,11 @@ V1 规则：
 ```
 
 该接口为只读；所有写操作仍通过上面的资源路由完成。
+
+字段说明：
+
+- org-chart read model 顶层字段使用 `policy_attachments`。
+- 当前 V1 载荷中这里可以承载 OU policy attachment 对象。
 
 ## 7. 旧版 `/control-plane` Action API 说明
 

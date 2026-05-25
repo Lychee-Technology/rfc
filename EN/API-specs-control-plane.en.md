@@ -214,6 +214,12 @@ The following remain under `/control-plane` as operational actions rather than a
 }
 ```
 
+Notes:
+
+- `policy_attachments` is the org-chart read-model field name.
+- In V1, these items are currently OU policy attachment records such as `{ "ou_id": "...", "policy_id": "...", "enforced": false }`.
+- This differs intentionally from the auth-config snapshot field `ou_policy_attachments`, because the org-chart response is a UI-oriented aggregate read model rather than a direct snapshot dump.
+
 ## 5. Org Chart Semantics And Invariants
 
 The org chart model follows two independent relationships:
@@ -575,6 +581,11 @@ Response:
 ```
 
 This endpoint is read-only. All writes still go through the resource endpoints above.
+
+Field note:
+
+- `policy_attachments` is the top-level field for the org-chart read model.
+- The current V1 payload shape may contain OU policy attachment objects.
 
 ## 7. Legacy `/control-plane` Action API Notes
 
