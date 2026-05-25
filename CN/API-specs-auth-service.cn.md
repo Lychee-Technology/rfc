@@ -1,28 +1,33 @@
 # LTBase API 规格：Auth Service
 
-本文档描述独立 control-plane gateway/domain 下已批准的 auth service 管理 REST API 合约。
+本文档描述独立 control-plane gateway/domain 下 `/api/v1/auth/...` 的已批准管理 REST API 合约。
 
 - 代码基线：
   - `ltbase.api/cmd/controlplane`
   - `rfc/CN/aaa.md`
 - 文档语言：中文
-- 更新日期：2026-05-24
+- 更新日期：2026-05-25
 
 ## 1. 总览
 
-Auth service 提供以下管理能力：
+Control-plane admin REST surface 当前拆分为两组路由：
 
-- 认证配置快照读取，用于初始化与检查
+- `/api/v1/auth/...`：AAA 配置与 referral 管理
+- `/api/v1/org/...`：组织架构与 OU 管理
+
+本文档覆盖 `/api/v1/auth/...` 路由：
+
+- auth 配置快照读取，用于初始化与检查
 - AAA 配置管理：用户、角色、统一策略、principal policy attachment、binding policy、referral
 - 与 `rfc/CN/aaa.md` 对齐的 policy-first 授权模型
 
-Control plane 下的 `/api/v1/org/...` 组织管理接口与旧版 `/control-plane` 运维 action 见 `API-specs-control-plane.cn.md`。
+`/api/v1/org/...` 路由与 `/control-plane` 运维 actions 见 `API-specs-control-plane.cn.md`。
 
 ## 2. 认证、作用域与公共约定
 
 ### 2.1 Admin 鉴权
 
-Auth service 管理 REST API 仅允许管理员访问。
+Control-plane admin REST API 仅允许管理员访问，并使用 Bearer JWT 认证。
 
 请求满足以下任一条件时允许访问：
 
@@ -55,8 +60,9 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 因此：
 
-- 每个 auth service 管理 REST 请求都隐式作用于部署环境配置中的 project
+- 每个管理 REST 请求都隐式作用于部署环境配置中的 project
 - 客户端不能在 path、query、header 或 body 中提供 `project_id`
+- 服务端从部署配置解析 project 作用域
 - 服务端可以在响应中返回只读的 `project_id`
 
 ### 2.3 成功与错误响应 envelope
@@ -79,6 +85,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+部分集合接口在有明确计数意义时还会返回 `total`。
+
 错误响应：
 
 ```json
@@ -88,6 +96,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "message": "invalid request body"
 }
 ```
+
+字段级或校验诊断可以通过可选 `details` 返回。
 
 ### 2.4 常见状态码
 
@@ -121,8 +131,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 | GET | `/api/v1/auth/policies/{policy_id}` | 获取单个策略配置 |
 | PATCH | `/api/v1/auth/policies/{policy_id}` | 更新单个策略配置 |
 | DELETE | `/api/v1/auth/policies/{policy_id}` | 删除单个策略配置 |
-| PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 给 user/role 绑定策略 |
-| DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 解绑 user/role 策略 |
+| PUT | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 给 user 或 role 绑定策略 |
+| DELETE | `/api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}` | 解绑 user 或 role 的策略 |
 | GET | `/api/v1/auth/binding-policies` | 列出 binding policies |
 | POST | `/api/v1/auth/binding-policies` | 创建 binding policy |
 | PATCH | `/api/v1/auth/binding-policies/{policy_id}` | 更新 binding policy |
@@ -156,7 +166,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 说明：
 
 - `referral_code` 属于当前 auth-config 用户快照字段。
-- `primary_ou_id` 与 `report_to_user_id` 属于已批准的组织管理合约，随着 user 或 org 资源接口落地，会由对应接口返回。
+- `primary_ou_id` 与 `report_to_user_id` 属于组织管理合约，可由 user 或 org 资源接口返回。
 
 ### 4.2 Role
 
@@ -255,7 +265,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ### `GET /api/v1/auth/config`
 
-用途：获取完整的 control-plane auth 配置快照，供管理后台初始化和检查使用。
+用途：获取完整 control-plane auth 配置快照，供管理后台初始化和检查使用。
 
 实现状态：当前分支已落地。
 
@@ -298,15 +308,16 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ## 6. Auth 资源 APIs
 
-下面的路由定义了已批准的 AAA 管理资源模型。在当前分支中，其中一部分资源仍在基于已落地的 snapshot 与 referral 接口逐步实现。
-
 ### 6.1 Users
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：
 
-`GET /api/v1/auth/users`
+- `GET /api/v1/auth/users` 与 `GET /api/v1/auth/users/{user_id}` 已在当前分支落地。
+- user 写接口仍为已批准合同文档，待实现落地。
 
-用途：列出已绑定的内部用户。
+#### `GET /api/v1/auth/users`
+
+用途：列出已绑定内部用户。
 
 支持的 query 参数：
 
@@ -315,7 +326,28 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `ou_id`
 - `manager_user_id`
 
-`GET /api/v1/auth/users/{user_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "user_id": "user_alice",
+      "provider": "google",
+      "issuer": "https://accounts.google.com",
+      "external_sub": "provider-subject",
+      "primary_ou_id": "ou_team_android",
+      "report_to_user_id": "user_manager_1",
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000,
+      "last_login_at": 1760000005000
+    }
+  ]
+}
+```
+
+#### `GET /api/v1/auth/users/{user_id}`
 
 用途：获取单个内部用户。
 
@@ -339,14 +371,18 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     "roles": [
       {
         "role_id": "role.employee",
-        "name": "Employee"
+        "name": "Employee",
+        "description": "Default employee role",
+        "parent_role_ids": [],
+        "created_at": 1760000000000,
+        "updated_at": 1760000000000
       }
     ]
   }
 }
 ```
 
-`PATCH /api/v1/auth/users/{user_id}`
+#### `PATCH /api/v1/auth/users/{user_id}`
 
 用途：更新 admin 可管理的用户组织字段。
 
@@ -359,29 +395,87 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "primary_ou_id": "ou_team_android",
+    "report_to_user_id": "user_manager_1"
+  }
+}
+```
+
 说明：
 
 - `provider`、`issuer`、`external_sub` 等身份字段不能通过该接口修改
 
-`PUT /api/v1/auth/users/{user_id}/roles/{role_id}`
+#### `PUT /api/v1/auth/users/{user_id}/roles/{role_id}`
 
 用途：给用户绑定角色。
 
-`DELETE /api/v1/auth/users/{user_id}/roles/{role_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "role_id": "role.manager"
+  }
+}
+```
+
+#### `DELETE /api/v1/auth/users/{user_id}/roles/{role_id}`
 
 用途：解绑用户角色。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "role_id": "role.manager"
+  }
+}
+```
 
 用户路由状态码：`200`、`400`、`401`、`403`、`404 user_not_found`、`409`、`500`
 
 ### 6.2 Roles
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：
 
-`GET /api/v1/auth/roles`
+- `GET /api/v1/auth/roles` 与 `GET /api/v1/auth/roles/{role_id}` 已在当前分支落地。
+- role 写接口仍为已批准合同文档，待实现落地。
+
+#### `GET /api/v1/auth/roles`
 
 用途：列出角色配置。
 
-`POST /api/v1/auth/roles`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "role_id": "role.manager",
+      "name": "Manager",
+      "description": "People manager",
+      "parent_role_ids": ["role.employee"],
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/auth/roles`
 
 用途：创建角色配置。
 
@@ -396,23 +490,100 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-`GET /api/v1/auth/roles/{role_id}`
+响应：
 
-`PATCH /api/v1/auth/roles/{role_id}`
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "role_id": "role.manager",
+    "name": "Manager",
+    "description": "People manager",
+    "parent_role_ids": ["role.employee"]
+  }
+}
+```
 
-`DELETE /api/v1/auth/roles/{role_id}`
+#### `GET /api/v1/auth/roles/{role_id}`
+
+用途：获取单个角色配置。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "role": {
+      "role_id": "role.manager",
+      "name": "Manager",
+      "description": "People manager",
+      "parent_role_ids": ["role.employee"],
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000
+    }
+  }
+}
+```
+
+#### `PATCH /api/v1/auth/roles/{role_id}`
+
+用途：更新可变角色字段。
+
+请求体：
+
+```json
+{
+  "name": "Manager",
+  "description": "People manager",
+  "parent_role_ids": ["role.employee"]
+}
+```
+
+#### `DELETE /api/v1/auth/roles/{role_id}`
+
+用途：删除单个角色配置。
 
 删除冲突返回 `409 role_in_use`。
 
 ### 6.3 Policies 与 Policy Attachments
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：
 
-`GET /api/v1/auth/policies`
+- `GET /api/v1/auth/policies` 与 `GET /api/v1/auth/policies/{policy_id}` 已在当前分支落地。
+- policy 写接口与 attachment 路由仍为已批准合同文档，待实现落地。
+
+#### `GET /api/v1/auth/policies`
 
 用途：列出策略配置。
 
-`POST /api/v1/auth/policies`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "policy_id": "policy.sales_read",
+      "name": "Sales Read Policy",
+      "description": "销售记录读取策略",
+      "document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "ops": ["read"],
+            "schema": "lead"
+          }
+        ]
+      },
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/auth/policies`
 
 用途：创建策略配置。
 
@@ -456,6 +627,18 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "policy_id": "policy.sales_read",
+    "name": "Sales Read Policy"
+  }
+}
+```
+
 说明：
 
 - `policy_document.statements` 是规范授权模型。
@@ -463,13 +646,47 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `selector` 可包含 `resource_id`、`filter`，或两者同时存在。
 - OU policy attachment 路由在 `API-specs-control-plane.cn.md` 中说明，因为它们通过 `/api/v1/org/...` 提供。
 
-`GET /api/v1/auth/policies/{policy_id}`
+#### `GET /api/v1/auth/policies/{policy_id}`
 
-`PATCH /api/v1/auth/policies/{policy_id}`
+用途：获取单个策略配置。
 
-`DELETE /api/v1/auth/policies/{policy_id}`
+响应：
 
-`PUT /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "policy": {
+      "policy_id": "policy.sales_read",
+      "name": "Sales Read Policy",
+      "description": "销售记录读取策略",
+      "document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "ops": ["read"],
+            "schema": "lead"
+          }
+        ]
+      },
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000
+    }
+  }
+}
+```
+
+#### `PATCH /api/v1/auth/policies/{policy_id}`
+
+用途：更新可变策略字段。
+
+#### `DELETE /api/v1/auth/policies/{policy_id}`
+
+用途：删除单个策略配置。
+
+删除冲突返回 `409 policy_in_use`。
+
+#### `PUT /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
 
 用途：给 user 或 role 绑定策略。
 
@@ -480,7 +697,20 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 OU 不是合法 principal。
 
-`DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "principal_type": "role",
+    "principal_id": "role.sales",
+    "policy_id": "policy.sales_read"
+  }
+}
+```
+
+#### `DELETE /api/v1/auth/principals/{principal_type}/{principal_id}/policies/{policy_id}`
 
 用途：解绑 user 或 role 的策略。
 
@@ -491,13 +721,36 @@ OU 不是合法 principal。
 
 ### 6.4 Binding Policies
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：已批准合同，但当前分支尚未作为 `/api/v1` 路由落地。
 
-`GET /api/v1/auth/binding-policies`
+#### `GET /api/v1/auth/binding-policies`
 
 用途：列出 binding policies。
 
-`POST /api/v1/auth/binding-policies`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "policy_id": "bind.company_email",
+      "enabled": true,
+      "priority": 10,
+      "rules": [
+        {
+          "l": "and",
+          "c": [
+            { "a": "external.email", "v": "ends_with:@company.com" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/auth/binding-policies`
 
 用途：创建 binding policy。
 
@@ -519,15 +772,19 @@ OU 不是合法 principal。
 }
 ```
 
-`PATCH /api/v1/auth/binding-policies/{policy_id}`
+#### `PATCH /api/v1/auth/binding-policies/{policy_id}`
 
-`DELETE /api/v1/auth/binding-policies/{policy_id}`
+用途：更新 binding policy。
+
+#### `DELETE /api/v1/auth/binding-policies/{policy_id}`
+
+用途：删除 binding policy。
 
 ### 6.5 Referrals
 
 实现状态：当前分支已落地。
 
-`GET /api/v1/auth/referrals`
+#### `GET /api/v1/auth/referrals`
 
 用途：列出 referral codes。
 
@@ -536,7 +793,23 @@ OU 不是合法 principal。
 - `status`
 - `code`
 
-`POST /api/v1/auth/referrals`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "code": "INVITE-2026-001",
+      "project_id": "11111111-1111-4111-8111-111111111111",
+      "status": "available"
+    }
+  ],
+  "total": 1
+}
+```
+
+#### `POST /api/v1/auth/referrals`
 
 用途：创建单个 referral code。
 
@@ -549,18 +822,103 @@ OU 不是合法 principal。
 }
 ```
 
-`POST /api/v1/auth/referrals?import=1`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "code": "INVITE-2026-001",
+    "status": "available"
+  }
+}
+```
+
+#### `POST /api/v1/auth/referrals?import=1`
 
 用途：批量导入 referral codes。
 
-`PATCH /api/v1/auth/referrals/{code}`
+请求体：
+
+```json
+[
+  {
+    "code": "INVITE-2026-001",
+    "expires_at_ms": 1767139200000
+  },
+  {
+    "code": "INVITE-2026-002",
+    "expires_at_ms": 1767139200000
+  }
+]
+```
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "created": 2,
+    "failed": 0
+  }
+}
+```
+
+#### `PATCH /api/v1/auth/referrals/{code}`
 
 用途：更新 referral code，通常是过期时间。
 
-`POST /api/v1/auth/referrals/{code}/disable`
+请求体：
+
+```json
+{
+  "expires_at_ms": 1767139200000
+}
+```
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "code": "INVITE-2026-001",
+    "status": "available"
+  }
+}
+```
+
+#### `POST /api/v1/auth/referrals/{code}/disable`
 
 用途：禁用 referral code。
 
-`DELETE /api/v1/auth/referrals/{code}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "code": "INVITE-2026-001",
+    "status": "disabled"
+  }
+}
+```
+
+#### `DELETE /api/v1/auth/referrals/{code}`
 
 用途：在允许时删除 referral code。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "code": "INVITE-2026-001",
+    "status": "deleted"
+  }
+}
+```
+
+Referral 路由状态码：`200`、`201`、`400`、`401`、`403`、`404 referral_not_found`、`409 referral_in_use|referral_exists`、`500`
