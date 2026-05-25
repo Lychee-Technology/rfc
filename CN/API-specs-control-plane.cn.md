@@ -1,27 +1,34 @@
 # LTBase API 规格：Control Plane
 
-本文档描述独立 control-plane gateway/domain 下的组织管理 REST API 与旧版 `/control-plane` 运维 API。
+本文档描述 `/api/v1/org/...` 下已批准的 control-plane admin REST API 合约，以及与其分离的旧版 `/control-plane` 运维 action API。
 
 - 代码基线：
   - `ltbase.api/cmd/controlplane`
   - `rfc/CN/aaa.md`
 - 文档语言：中文
-- 更新日期：2026-05-24
+- 更新日期：2026-05-25
 
 ## 1. 总览
+
+Control-plane admin REST surface 当前拆分为两组路由：
+
+- `/api/v1/auth/...`：AAA 配置与 referral 管理
+- `/api/v1/org/...`：组织架构与 OU 管理
+
+本文档覆盖 `/api/v1/org/...` 路由，并说明 admin REST API 与 `/control-plane` 运维 action API 的边界。
 
 Control plane 提供以下管理能力：
 
 - 组织架构管理：OU、汇报关系、OU policy attachment、org chart read model
-- `/control-plane` 下的运维 action API：bootstrap、repair、catalog、migration 等流程
+- 独立的 `/control-plane` 运维 action：bootstrap、repair、catalog、schema、migration 等流程
 
-Auth service 的 `/api/v1/auth/...` 认证与 AAA 管理接口见 `API-specs-auth-service.cn.md`。
+`/api/v1/auth/...` 路由见 `API-specs-auth-service.cn.md`。
 
 ## 2. 认证、作用域与公共约定
 
 ### 2.1 Admin 鉴权
 
-Control-plane admin REST API 仅允许管理员访问。
+Control-plane admin REST API 仅允许管理员访问，并使用 Bearer JWT 认证。
 
 请求满足以下任一条件时允许访问：
 
@@ -56,6 +63,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 - 每个 control-plane admin REST 请求都隐式作用于部署环境配置中的 project
 - 客户端不能在 path、query、header 或 body 中提供 `project_id`
+- 服务端从部署配置解析 project 作用域
 - 服务端可以在响应中返回只读的 `project_id`
 
 ### 2.3 成功与错误响应 envelope
@@ -78,6 +86,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+当前已批准的 org 路由不要求 `total`，后续如某个集合接口出现明确计数语义，可以单独加入。
+
 错误响应：
 
 ```json
@@ -87,6 +97,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "message": "invalid request body"
 }
 ```
+
+字段级或校验诊断可以通过可选 `details` 返回。
 
 ### 2.4 常见状态码
 
@@ -102,7 +114,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ## 3. 路由总表
 
-### 3.1 REST 路由
+### 3.1 Admin REST 路由
 
 | Method | Path | 功能 |
 | --- | --- | --- |
@@ -124,7 +136,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ### 3.2 旧版 `/control-plane` Actions
 
-以下 action 仍通过 `/control-plane` 提供：
+以下接口仍以运维 action 的形式通过 `/control-plane` 提供，而不是 admin REST 资源：
 
 - `ensure-project`
 - `repair-project`
@@ -198,24 +210,36 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "root_ou_id": "ou_rnd",
   "org_units": [],
   "users": [],
-  "ou_policy_attachments": []
+  "policy_attachments": []
 }
 ```
 
-## 5. Org Chart APIs
+## 5. 组织架构语义与约束
 
 组织架构模型包含两条相互独立的关系：
 
-- 通过 `primary_ou_id` 表达 OU containment
+- 通过 `primary_ou_id` 与 `parent_ou_id` 表达 OU containment
 - 通过 `report_to_user_id` 表达 manager relationship
 
-这些路由属于已批准的 control-plane admin 合约，可能会分阶段落地实现；字段命名与语义以 `rfc/CN/aaa.md` 为准。
+V1 规则：
 
-### 5.1 Org Units
+- OU containment 必须形成树
+- `ou_path` 由服务端维护，客户端只读
+- 移动 OU 时必须安全重算整棵子树的路径
+- OU 不能移动到自己的后代子树中
+- 用户不能直接或间接向自己汇报
+- dotted-line 或 matrix reporting 不在 V1 范围内
+- OU 不是 principal，不能用于 principal policy attachment
+- OU 范围授权通过 OU policy attachment 实现
+- `block_inheritance` 与 `enforced` 为前向兼容字段，可接受并存储，但 V1 运行时仍按简单 ancestor-union inheritance 处理
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+## 6. Org Chart APIs
 
-`GET /api/v1/org/units`
+### 6.1 Org Units
+
+实现状态：已批准合同，但当前分支尚未落地 `/api/v1/org/...` 路由。
+
+#### `GET /api/v1/org/units`
 
 用途：列出 OU。
 
@@ -225,7 +249,26 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `tree=true`
 - `q`
 
-`POST /api/v1/org/units`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "ou_id": "ou_team_android",
+      "name": "Team Android",
+      "parent_ou_id": "ou_mobiledev",
+      "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+      "block_inheritance": false,
+      "created_at": 1760000000000,
+      "updated_at": 1760000000000
+    }
+  ]
+}
+```
+
+#### `POST /api/v1/org/units`
 
 用途：创建 OU。
 
@@ -240,14 +283,48 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "ou_id": "ou_team_android",
+    "name": "Team Android",
+    "parent_ou_id": "ou_mobiledev",
+    "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+    "block_inheritance": false
+  }
+}
+```
+
 说明：
 
 - 客户端不能传 `ou_path`
 - `ou_path` 由服务端维护
 
-`GET /api/v1/org/units/{ou_id}`
+#### `GET /api/v1/org/units/{ou_id}`
 
-`PATCH /api/v1/org/units/{ou_id}`
+用途：获取单个 OU。
+
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "ou_id": "ou_team_android",
+    "name": "Team Android",
+    "parent_ou_id": "ou_mobiledev",
+    "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+    "block_inheritance": false,
+    "created_at": 1760000000000,
+    "updated_at": 1760000000000
+  }
+}
+```
+
+#### `PATCH /api/v1/org/units/{ou_id}`
 
 用途：更新或移动 OU。
 
@@ -261,31 +338,94 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-`DELETE /api/v1/org/units/{ou_id}`
+响应：
 
-用途：仅当没有子 OU 且没有用户时删除 OU。
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "ou_id": "ou_team_android",
+    "name": "Android Platform",
+    "parent_ou_id": "ou_mobiledev",
+    "ou_path": "/ou_rnd/ou_mobiledev/ou_team_android",
+    "block_inheritance": false
+  }
+}
+```
 
-### 5.2 Org Unit Users 与 Policies
+如果移动会形成 containment cycle，服务端必须返回 `400 invalid_org_cycle`。
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+#### `DELETE /api/v1/org/units/{ou_id}`
 
-`GET /api/v1/org/units/{ou_id}/users`
+用途：仅当没有子 OU 且没有分配用户时删除 OU。
 
-用途：列出 OU 下的用户。
+冲突返回 `409 ou_not_empty`。
+
+### 6.2 Org Unit Users 与 Policies
+
+实现状态：已批准合同，但当前分支尚未落地 `/api/v1/org/...` 路由。
+
+#### `GET /api/v1/org/units/{ou_id}/users`
+
+用途：列出 OU 下用户。
 
 支持的 query 参数：
 
 - `include_subtree=true`
 
-`PUT /api/v1/org/units/{ou_id}/users/{user_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "user_id": "user_alice",
+      "primary_ou_id": "ou_team_android",
+      "report_to_user_id": "user_manager_1"
+    }
+  ]
+}
+```
+
+#### `PUT /api/v1/org/units/{ou_id}/users/{user_id}`
 
 用途：把用户移动到指定 OU。
 
-`GET /api/v1/org/units/{ou_id}/policies`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "primary_ou_id": "ou_team_android"
+  }
+}
+```
+
+该路由是直接更新 user 资源的便捷形式。
+
+#### `GET /api/v1/org/units/{ou_id}/policies`
 
 用途：列出挂载到 OU 的策略。
 
-`PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "ou_id": "ou_team_android",
+      "policy_id": "policy.sales_read",
+      "enforced": false
+    }
+  ]
+}
+```
+
+#### `PUT /api/v1/org/units/{ou_id}/policies/{policy_id}`
 
 用途：给 OU 挂载策略。
 
@@ -297,24 +437,52 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-`DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "ou_id": "ou_team_android",
+    "policy_id": "policy.sales_read",
+    "enforced": false
+  }
+}
+```
+
+#### `DELETE /api/v1/org/units/{ou_id}/policies/{policy_id}`
 
 用途：解绑 OU 上的策略。
 
 说明：
 
 - OU 不是 principal
-- `block_inheritance` 与 `enforced` 在 V1 中仅存储，不参与 evaluator
+- `block_inheritance` 与 `enforced` 在 V1 中会被存储，但不会参与 evaluator
 
-### 5.3 Manager APIs
+### 6.3 Manager APIs
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：已批准合同，但当前分支尚未落地 `/api/v1/org/...` 路由。
 
-`GET /api/v1/org/users/{user_id}/manager`
+#### `GET /api/v1/org/users/{user_id}/manager`
 
 用途：获取用户直属经理。
 
-`PUT /api/v1/org/users/{user_id}/manager`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "report_to_user_id": "user_manager_1",
+    "manager": {
+      "user_id": "user_manager_1"
+    }
+  }
+}
+```
+
+#### `PUT /api/v1/org/users/{user_id}/manager`
 
 用途：设置用户直属经理。
 
@@ -326,11 +494,35 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 }
 ```
 
-`DELETE /api/v1/org/users/{user_id}/manager`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "report_to_user_id": "user_manager_1"
+  }
+}
+```
+
+#### `DELETE /api/v1/org/users/{user_id}/manager`
 
 用途：清空直属经理关系。
 
-`GET /api/v1/org/users/{user_id}/direct-reports`
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "data": {
+    "user_id": "user_alice",
+    "report_to_user_id": ""
+  }
+}
+```
+
+#### `GET /api/v1/org/users/{user_id}/direct-reports`
 
 用途：列出用户直属下属。
 
@@ -338,13 +530,27 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 - `recursive=true`
 
+响应：
+
+```json
+{
+  "request_id": "req_123",
+  "items": [
+    {
+      "user_id": "user_bob",
+      "report_to_user_id": "user_manager_1"
+    }
+  ]
+}
+```
+
 循环保护错误返回 `400 invalid_org_cycle`。
 
-### 5.4 Org Chart Read Model
+### 6.4 Org Chart Read Model
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` UI 路由落地。
+实现状态：已批准合同，但当前分支尚未落地 `/api/v1/org/...` 路由。
 
-`GET /api/v1/org/charts`
+#### `GET /api/v1/org/charts`
 
 用途：获取管理后台友好的 org chart read model。
 
@@ -363,27 +569,23 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     "root_ou_id": "ou_rnd",
     "org_units": [],
     "users": [],
-    "ou_policy_attachments": []
+    "policy_attachments": []
   }
 }
 ```
 
-## 6. 旧版 `/control-plane` Action API 说明
+该接口为只读；所有写操作仍通过上面的资源路由完成。
 
-REST admin API 不替代现有的 action-style control-plane API。
+## 7. 旧版 `/control-plane` Action API 说明
 
-以下 action 仍通过 `/control-plane` 提供：
-
-- `ensure-project`
-- `repair-project`
-- `update-schema`
-- `create-permission-records`
-- `create-iam-authz-records`
-- `list-project-auth-config`
-- `migrate-authz-policy-model`
-- catalog put/get actions
-- `import-referrals`
+Admin REST API 不替代现有的 action-style control-plane API。
 
 产品化管理后台与自动化配置请使用 REST admin API。
 
 Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/control-plane`。
+
+特别是：
+
+- `ensure-project`、repair、schema、catalog、migration 等仍保留在 `/control-plane`
+- `migrate-authz-policy-model` 是运维 action，不是 `/api/v1/...` REST endpoint
+- admin REST 合约是 resource-oriented，而 `/control-plane` 是 action-oriented
