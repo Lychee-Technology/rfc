@@ -908,9 +908,9 @@ LLM 不直接编辑底层存储，而是通过结构化 API 操作治理图谱�
 type GovernanceService interface {
 	CreateConceptProposal(ctx context.Context, req CreateConceptProposalRequest) (*PolicyConcept, error)
 	CreateClaim(ctx context.Context, req CreateClaimRequest) (*ActionClaim, error)
-	CreateObligationProposal(ctx context.Context, req CreateObligationProposalRequest) (*AgentRule, error)
+	CreateAgentRuleProposal(ctx context.Context, req CreateAgentRuleProposalRequest) (*AgentRule, error)
 	AttachEvidence(ctx context.Context, req AttachEvidenceRequest) (*AuditEvidence, error)
-	FindApplicableObligations(ctx context.Context, req ApplicableObligationsRequest) ([]AgentRule, error)
+	FindApplicableAgentRules(ctx context.Context, req ApplicableAgentRulesRequest) ([]AgentRule, error)
 	FindEvidenceGaps(ctx context.Context, req EvidenceGapRequest) ([]EvidenceGap, error)
 	FindAcceptedClaims(ctx context.Context, subject, predicate string) ([]ActionClaim, error)
 	FindExpiredEvidence(ctx context.Context) ([]AuditEvidence, error)
@@ -946,7 +946,7 @@ func (t *CreateClaimTool) Execute(ctx context.Context, input json.RawMessage) (T
 
 如果基于 LTBase 落地，这一层更适合实现为 **LTAgent Tool + Go service API**，而不是让 LLM 直接操作数据库或自由编辑文档。也就是说，上述接口在工程上应映射为：
 
-* LTAgent 中的治理专用 tool，例如 `create_claim`, `create_obligation_proposal`, `attach_evidence`；
+* LTAgent 中的治理专用 tool，例如 `create_claim`, `create_agent_rule_proposal`, `attach_evidence`；
 * `ltbase.api` 中的 governance service，对 schema、权限、来源和状态流转做集中校验；
 * LTFlow 的 `ltflow.llm` activity 用于驱动需要异步回调的长时推理或审批辅助步骤。
 

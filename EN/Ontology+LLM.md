@@ -735,13 +735,14 @@ LLMs should not edit storage directly. They should call structured governance AP
 type GovernanceService interface {
     CreateConceptProposal(ctx context.Context, req CreateConceptProposalRequest) (*PolicyConcept, error)
     CreateClaim(ctx context.Context, req CreateClaimRequest) (*ActionClaim, error)
-    CreateObligationProposal(ctx context.Context, req CreateObligationProposalRequest) (*AgentRule, error)
+    CreateAgentRuleProposal(ctx context.Context, req CreateAgentRuleProposalRequest) (*AgentRule, error)
     AttachEvidence(ctx context.Context, req AttachEvidenceRequest) (*AuditEvidence, error)
-    FindApplicableObligations(ctx context.Context, req ApplicableObligationsRequest) ([]AgentRule, error)
+    FindApplicableAgentRules(ctx context.Context, req ApplicableAgentRulesRequest) ([]AgentRule, error)
     FindEvidenceGaps(ctx context.Context, req EvidenceGapRequest) ([]EvidenceGap, error)
     FindAcceptedClaims(ctx context.Context, subject, predicate string) ([]ActionClaim, error)
     FindExpiredEvidence(ctx context.Context) ([]AuditEvidence, error)
     FindUnreviewedClaims(ctx context.Context, olderThanDays int) ([]ActionClaim, error)
+    FindObligationGaps(ctx context.Context) ([]ObligationGap, error)
     CheckContractSync(ctx context.Context) ([]SyncGap, error)
 }
 ```
