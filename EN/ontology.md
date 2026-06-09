@@ -1,5 +1,7 @@
 # LTBase Operational Ontology RFC
 
+> **Implementation status (2026-06-09):** The ontology read API surface proposed in section 6 is implemented and documented at `ltbase.api/docs/ontology-api.md`. All nine routes (object types, link types, action types, object instances, search, reachable, actions, provenance) are available under `/api/sys/v1/ontology`. The implementation is a read adapter over existing semantic and Forma layers — no second graph database was introduced.
+
 ## 1. Overview
 
 This document proposes an ontology-first semantic layer for LTBase.

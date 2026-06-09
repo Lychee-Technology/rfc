@@ -10,7 +10,7 @@
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - 文档语言：中文
-- 更新日期：2026-05-24
+- 更新日期：2026-06-09
 
 ## 1. 总览
 
@@ -22,7 +22,8 @@
 - Forma：实体 CRUD、列表查询、跨 schema 搜索、高级条件查询
 - CRUD Agent：会话创建、会话状态、消息驱动执行、直接执行
 - Semantic：资源目录与实体 lineage 查询
-- Governance：实体/能力/策略的治理视图
+- Ontology：基于语义层和 Forma 层的项目作用域、对象中心只读模型
+- Governance：治理视图、ActionClaim 生命周期、审计证据、事件日志和 action engine
 - Discovery：语义图可达性与路径查询
 - Intent-to-Action Planning：意图规划、计划执行、执行状态查询
 
@@ -131,9 +132,29 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 | GET | `/api/v1/semantic/resources` | 列出语义资源 |
 | GET | `/api/v1/semantic/resources/{resource_id}` | 获取语义资源详情 |
 | GET | `/api/v1/semantic/lineage/{entity_type}/{row_id}` | 获取实体 lineage |
+| GET | `/api/sys/v1/ontology/object-types` | 列出本体对象类型 |
+| GET | `/api/sys/v1/ontology/object-types/{type_name}` | 获取单个本体对象类型 |
+| GET | `/api/sys/v1/ontology/link-types` | 列出本体链接类型 |
+| GET | `/api/sys/v1/ontology/action-types` | 列出本体动作类型 |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}` | 获取本体对象实例 |
+| POST | `/api/sys/v1/ontology/objects/{type_name}/search` | 按类型搜索本体对象实例 |
+| POST | `/api/sys/v1/ontology/objects/{type_name}/{id}/reachable` | 读取对象可达图 |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}/actions` | 列出对象关联的受治理动作 |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}/provenance` | 返回对象溯源信息 |
 | GET | `/api/sys/v1/governance/entities/{entity_name}/capabilities` | 实体治理视图 |
 | GET | `/api/sys/v1/governance/capabilities/{capability_name}` | 能力治理视图 |
 | GET | `/api/sys/v1/governance/policies/{policy_id}/capabilities` | 策略治理视图 |
+| POST | `/api/sys/v1/governance/claims` | 创建 ActionClaim |
+| GET | `/api/sys/v1/governance/claims` | 查询已批准的 claims |
+| POST | `/api/sys/v1/governance/claims/{claim_id}/approve` | 批准 claim |
+| POST | `/api/sys/v1/governance/claims/{claim_id}/reject` | 驳回 claim |
+| GET | `/api/sys/v1/governance/events` | 查询治理事件日志 |
+| POST | `/api/sys/v1/governance/evidence` | 提交审计证据 |
+| GET | `/api/sys/v1/governance/evidence/gaps` | 查询证据缺口 |
+| GET | `/api/sys/v1/governance/evidence/expired` | 查询过期证据 |
+| POST | `/api/sys/v1/governance/evidence/{evidence_id}/validate` | 核验证据 |
+| POST | `/api/ai/v1/governance/actions/execute` | 执行治理 action contract |
+| POST | `/api/sys/v1/governance/monitoring/re-evaluate` | 触发合规重新评估 |
 | POST | `/api/sys/v1/discovery/reachable` | 语义图可达性查询 |
 | POST | `/api/sys/v1/discovery/paths` | 语义图路径查询 |
 | POST | `/api/ai/v1/intent-to-action/plans` | 创建意图计划 |
@@ -938,7 +959,13 @@ Query 参数：
 
 状态码：`200`、`400 unknown_entity_type`、`500`
 
-## 11. Governance API
+## 11. Ontology API
+
+Ontology 路由是项目作用域、只读的语义层和 Forma 层适配器，提供对象中心的读取模型，不引入第二个图数据库。
+
+完整 ontology API surface —— 路由列表、请求/响应示例、错误语义、与 semantic/governance/discovery/planning/Forma 的关系 —— 见 `ltbase.api/docs/ontology-api.md`。
+
+## 12. Governance API
 
 ### 11.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
 
@@ -988,9 +1015,11 @@ Query 参数：
 
 状态码：`200`、`400`、`401`、`404`、`500`
 
-## 12. Discovery API
+其余治理路由覆盖 ActionClaim 生命周期（创建、批准、驳回、查询）、审计证据（提交、核验、查询缺口/过期）、治理事件日志、治理 action engine（`POST /api/ai/v1/governance/actions/execute`）和监控重新评估。完整路由列表和示例见 `ltbase.api/docs/governance-api.md`。
 
-### 12.1 公共参数
+## 13. Discovery API
+
+### 13.1 公共参数
 
 Discovery 请求体使用以下结构：
 
@@ -1030,7 +1059,7 @@ Discovery 请求体使用以下结构：
 - `limits.max_edges` 默认 `500`
 - `limits.max_paths` 默认 `10`
 
-### 12.2 `POST /api/sys/v1/discovery/reachable`
+### 13.2 `POST /api/sys/v1/discovery/reachable`
 
 用途：从一个 anchor 出发，查询可达资源。
 
@@ -1084,7 +1113,7 @@ Discovery 请求体使用以下结构：
 
 状态码：`200`、`400 invalid_request`、`401`、`404`、`500`
 
-### 12.3 `POST /api/sys/v1/discovery/paths`
+### 13.3 `POST /api/sys/v1/discovery/paths`
 
 用途：查询两个 anchor 之间的路径。
 
@@ -1153,9 +1182,9 @@ Discovery 请求体使用以下结构：
 
 状态码：`200`、`400 invalid_request`、`401`、`404`、`500`
 
-## 13. Intent-to-Action Planning API
+## 14. Intent-to-Action Planning API
 
-### 13.1 `POST /api/ai/v1/intent-to-action/plans`
+### 14.1 `POST /api/ai/v1/intent-to-action/plans`
 
 用途：把自然语言意图转换为可执行计划。
 
@@ -1239,7 +1268,7 @@ Discovery 请求体使用以下结构：
 
 状态码：`200`、`400 invalid_request`、`401`、`500`
 
-### 13.2 `POST /api/ai/v1/intent-to-action/executions`
+### 14.2 `POST /api/ai/v1/intent-to-action/executions`
 
 用途：执行已持久化计划中的一个步骤。
 
@@ -1314,7 +1343,7 @@ Discovery 请求体使用以下结构：
 - `422`：步骤不可内部执行
 - `500`
 
-### 13.3 `GET /api/ai/v1/intent-to-action/executions/{execution_id}`
+### 14.3 `GET /api/ai/v1/intent-to-action/executions/{execution_id}`
 
 用途：读取已持久化执行状态。
 
@@ -1322,7 +1351,7 @@ Discovery 请求体使用以下结构：
 
 状态码：`200`、`400 invalid_request`、`401`、`404 execution_not_found`、`409 execution_context_mismatch`、`500`
 
-## 14. 与旧版 spec 的主要差异
+## 15. 与旧版 spec 的主要差异
 
 相较此前基于旧 handler 快照的文档，当前实现有以下关键变化：
 
@@ -1331,6 +1360,7 @@ Discovery 请求体使用以下结构：
 - `Accept-Language` 与 `X-LTBASE-TZ-ID` 已有实际处理逻辑
 - `cmd/api` 已新增并暴露：
   - Semantic API
+  - Ontology API
   - Governance API
   - Discovery API
   - Intent-to-Action Planning API

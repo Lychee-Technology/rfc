@@ -10,7 +10,7 @@ This document describes the LTBase HTTP API surface for the current data plane i
   - `ltbase.api/internal/http_handler_crud.go`
   - `ltbase.api/internal/semantic/*.go`
 - Document language: English
-- Updated on: 2026-05-24
+- Updated on: 2026-06-09
 
 ## 1. Overview
 
@@ -22,7 +22,8 @@ The current data plane provides the following capabilities:
 - Forma: entity CRUD, list queries, cross-schema search, and advanced conditional queries
 - CRUD Agent: session creation, session status retrieval, message-driven execution, and direct execution
 - Semantic: semantic resource catalog and entity lineage lookup
-- Governance: governance views for entities, capabilities, and policies
+- Ontology: project-scoped, object-centric read model over semantic and Forma layers
+- Governance: governance views, ActionClaim lifecycle, audit evidence, event log, and action engine
 - Discovery: semantic graph reachability and path queries
 - Intent-to-Action Planning: intent planning, plan execution, and execution status lookup
 
@@ -131,9 +132,29 @@ Except for a few internally delegated handlers, the top-level API consistently u
 | GET | `/api/v1/semantic/resources` | List semantic resources |
 | GET | `/api/v1/semantic/resources/{resource_id}` | Retrieve semantic resource details |
 | GET | `/api/v1/semantic/lineage/{entity_type}/{row_id}` | Retrieve entity lineage |
+| GET | `/api/sys/v1/ontology/object-types` | List ontology object types |
+| GET | `/api/sys/v1/ontology/object-types/{type_name}` | Get one ontology object type |
+| GET | `/api/sys/v1/ontology/link-types` | List ontology link types |
+| GET | `/api/sys/v1/ontology/action-types` | List ontology action types |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}` | Get one ontology object instance |
+| POST | `/api/sys/v1/ontology/objects/{type_name}/search` | Search ontology object instances by type |
+| POST | `/api/sys/v1/ontology/objects/{type_name}/{id}/reachable` | Read semantic reachability for one object |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}/actions` | List governed actions for one object |
+| GET | `/api/sys/v1/ontology/objects/{type_name}/{id}/provenance` | Return object-centric provenance |
 | GET | `/api/sys/v1/governance/entities/{entity_name}/capabilities` | Retrieve the entity governance view |
 | GET | `/api/sys/v1/governance/capabilities/{capability_name}` | Retrieve the capability governance view |
 | GET | `/api/sys/v1/governance/policies/{policy_id}/capabilities` | Retrieve the policy governance view |
+| POST | `/api/sys/v1/governance/claims` | Create an ActionClaim |
+| GET | `/api/sys/v1/governance/claims` | Query accepted claims |
+| POST | `/api/sys/v1/governance/claims/{claim_id}/approve` | Approve a claim |
+| POST | `/api/sys/v1/governance/claims/{claim_id}/reject` | Reject a claim |
+| GET | `/api/sys/v1/governance/events` | Query governance event log |
+| POST | `/api/sys/v1/governance/evidence` | Submit audit evidence |
+| GET | `/api/sys/v1/governance/evidence/gaps` | Query evidence gaps |
+| GET | `/api/sys/v1/governance/evidence/expired` | Query expired evidence |
+| POST | `/api/sys/v1/governance/evidence/{evidence_id}/validate` | Validate evidence |
+| POST | `/api/ai/v1/governance/actions/execute` | Execute a governance action contract |
+| POST | `/api/sys/v1/governance/monitoring/re-evaluate` | Trigger compliance re-evaluation |
 | POST | `/api/sys/v1/discovery/reachable` | Run a semantic graph reachability query |
 | POST | `/api/sys/v1/discovery/paths` | Run a semantic graph path query |
 | POST | `/api/ai/v1/intent-to-action/plans` | Create an intent plan |
@@ -938,7 +959,13 @@ Response:
 
 Status codes: `200`, `400 unknown_entity_type`, `500`
 
-## 11. Governance API
+## 11. Ontology API
+
+Ontology routes are project-scoped, read-only adapters over the semantic and Forma layers. They provide an object-centric read model without introducing a second graph database.
+
+The full ontology API surface — including route list, request/response examples, error semantics, and relation to semantic, governance, discovery, planning, and Forma APIs — is documented in `ltbase.api/docs/ontology-api.md`.
+
+## 12. Governance API
 
 ### 11.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
 
@@ -988,9 +1015,11 @@ Response:
 
 Status codes: `200`, `400`, `401`, `404`, `500`
 
-## 12. Discovery API
+Additional governance routes cover ActionClaim lifecycle (create, approve, reject, query), audit evidence (submit, validate, query gaps/expired), the governance event log, the governance action engine (`POST /api/ai/v1/governance/actions/execute`), and monitoring re-evaluation. Full route list and examples are in `ltbase.api/docs/governance-api.md`.
 
-### 12.1 Shared Parameters
+## 13. Discovery API
+
+### 13.1 Shared Parameters
 
 Discovery request bodies use the following structure:
 
@@ -1030,7 +1059,7 @@ Constraints:
 - `limits.max_edges` defaults to `500`
 - `limits.max_paths` defaults to `10`
 
-### 12.2 `POST /api/sys/v1/discovery/reachable`
+### 13.2 `POST /api/sys/v1/discovery/reachable`
 
 Purpose: Query resources reachable from an anchor.
 
@@ -1084,7 +1113,7 @@ Response:
 
 Status codes: `200`, `400 invalid_request`, `401`, `404`, `500`
 
-### 12.3 `POST /api/sys/v1/discovery/paths`
+### 13.3 `POST /api/sys/v1/discovery/paths`
 
 Purpose: Query paths between two anchors.
 
@@ -1153,9 +1182,9 @@ Response:
 
 Status codes: `200`, `400 invalid_request`, `401`, `404`, `500`
 
-## 13. Intent-to-Action Planning API
+## 14. Intent-to-Action Planning API
 
-### 13.1 `POST /api/ai/v1/intent-to-action/plans`
+### 14.1 `POST /api/ai/v1/intent-to-action/plans`
 
 Purpose: Convert a natural-language intent into an executable plan.
 
@@ -1239,7 +1268,7 @@ Response:
 
 Status codes: `200`, `400 invalid_request`, `401`, `500`
 
-### 13.2 `POST /api/ai/v1/intent-to-action/executions`
+### 14.2 `POST /api/ai/v1/intent-to-action/executions`
 
 Purpose: Execute a single step from a persisted plan.
 
@@ -1314,7 +1343,7 @@ Status codes:
 - `422`: the step is not internally executable
 - `500`
 
-### 13.3 `GET /api/ai/v1/intent-to-action/executions/{execution_id}`
+### 14.3 `GET /api/ai/v1/intent-to-action/executions/{execution_id}`
 
 Purpose: Retrieve persisted execution status.
 
@@ -1322,7 +1351,7 @@ Response: `ExecutionEnvelope`
 
 Status codes: `200`, `400 invalid_request`, `401`, `404 execution_not_found`, `409 execution_context_mismatch`, `500`
 
-## 14. Major Differences from the Older Spec
+## 15. Major Differences from the Older Spec
 
 Compared with earlier documentation based on an older handler snapshot, the current implementation has the following major changes:
 
@@ -1331,6 +1360,7 @@ Compared with earlier documentation based on an older handler snapshot, the curr
 - `Accept-Language` and `X-LTBASE-TZ-ID` now have active handling logic
 - `cmd/api` now includes and exposes:
   - Semantic API
+  - Ontology API
   - Governance API
   - Discovery API
   - Intent-to-Action Planning API
