@@ -342,6 +342,8 @@ Policies are attached to principals (`user`, `role`) and to `OU` containers; OU 
 
 > [!NOTE]
 > Earlier drafts of this document carried three parallel authorization mechanisms — `resource_grant`, `permission_profile`, and `policy_profile`. They have been folded into the unified statement model above. `resource_grant` survives only as a possible **physical projection** (see 4.2), not as a separate logical concept.
+>
+> For the canonical definition of each legacy term, the full migration mapping, and the JWT `permissions` claim compatibility contract, see `policy-permission-relationship.md`.
 
 ### **4.2 Physical Optimizations**
 

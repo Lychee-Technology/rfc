@@ -340,6 +340,8 @@ Policy 可以附加到主体（`user`、`role`）和 `OU` 容器上;OU 上的附
 
 > [!NOTE]
 > 早期草案中并存的三套机制 —— `resource_grant`、`permission_profile`、`policy_profile` —— 已合并为统一 statement 模型。`resource_grant` 仅作为**物理投影**保留（见 4.2），不再是独立的逻辑概念。
+>
+> 每个 legacy 术语的规范化定义、完整迁移映射、JWT `permissions` claim 兼容约定，见 `policy-permission-relationship.md`。
 
 ### **4.2 物理优化**
 
