@@ -23,8 +23,10 @@ Technical ideas which request for comments
 
 * `EN/aaa.md` - storage-agnostic AAA architecture specification
 * `EN/aaa-control-plane-store-mapping.md` - DynamoDB/PostgreSQL control-plane store mapping for the AAA model
+* `EN/policy-permission-relationship.md` - canonical policy-permission terminology and migration semantics
 
 ### Chinese
 
 * `CN/aaa.md` - AAA architecture specification in Chinese
 * `CN/aaa-control-plane-store-mapping.md` - AAA control-plane store backend mapping in Chinese
+* `CN/policy-permission-relationship.md` - canonical policy-permission terminology and migration semantics in Chinese
