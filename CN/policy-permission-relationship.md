@@ -1,4 +1,4 @@
-# Policy–Permission 关系 —— 规范术语定义
+# **Policy–Permission 关系 —— 规范术语定义**
 
 本文定义 LTBase auth 与控制面中 `policy` 与 `permission` 之间的规范关系。它锁定 canonical model、标识 legacy 兼容面，并说明迁移语义。
 
@@ -6,7 +6,7 @@
 
 ---
 
-## 1. 问题
+## **1. 问题**
 
 LTBase 代码库与文档中同时存在面向 legacy permission 的结构（`permission_profile`、`role_permission_attachment`）和面向 policy 的结构（`policy_profile`、`principal_policy_attachment`、`ou_policy_attachment`）。维护者和后续实现者需要明确以下问题：
 
@@ -20,7 +20,7 @@ LTBase 代码库与文档中同时存在面向 legacy permission 的结构（`pe
 
 ---
 
-## 2. 决策
+## **2. 决策**
 
 | 概念 | 状态 | 是否 canonical |
 | --- | --- | --- |
@@ -29,14 +29,14 @@ LTBase 代码库与文档中同时存在面向 legacy permission 的结构（`pe
 | `ou_policy_attachment` | 将 `policy` 绑定到 OU，并沿 OU 子树继承 | **是 —— canonical 组织授权关系** |
 | `permission_profile` | Legacy 记录，表示单个 permission 名称与可选 rule | **否 —— legacy 数据，非 canonical** |
 | `role_permission_attachment` | Legacy 边，连接角色与 permission | **否 —— legacy 绑定边** |
-| `resource_grant` | Legacy / 过渡期 grant，描述主体对资源的访问权限 | **否 —— 仅可作为物理投影索引用作热路径优化** |
+| `resource_grant` | Legacy / 过渡期 主体到资源的 grant（手动或迁移产生） | **否 —— 仅可作为物理投影索引用作热路径优化** |
 | JWT `permissions` claim | JWT 中的运行时兼容字段；某些 authorizer 会消费它（如 `controlplane.admin`） | **否 —— 兼容字段，不等同于 canonical 模型** |
 
 统一的 `policy_profile` 模型（定义于 `aaa.md` §4.1）是唯一 canonical 授权模型。其他所有授权概念均为 legacy 或派生。
 
 ---
 
-## 3. Canonical Policy 模型
+## **3. Canonical Policy 模型**
 
 详见 `aaa.md` §4.1。要点：
 
@@ -50,9 +50,9 @@ Policy 独立存在。它**不依赖** permission 即可存在，也**不引用*
 
 ---
 
-## 4. Legacy Permission 模型
+## **4. Legacy Permission 模型**
 
-### 4.1 `permission_profile`
+### **4.1 `permission_profile`**
 
 Legacy DynamoDB 记录（`entity_type = "permission_profile"`），表示命名 permission，例如 `log:create` 或 `controlplane.admin`，可携带可选 `rule` 与 `outcome`。
 
@@ -60,7 +60,7 @@ Legacy DynamoDB 记录（`entity_type = "permission_profile"`），表示命名 
 - **写路径：** 不可通过新 control-plane REST API 写入。Legacy 写路径（`CreatePermissionRecords`）保留在 action 风格 `/control-plane` 接口中，仅用于向后兼容。
 - **Evaluator：** 任何 evaluator 都不应直接依赖 `permission_profile` 记录。Evaluator 应处理 `policy_profile` statement。
 
-### 4.2 `role_permission_attachment`
+### **4.2 `role_permission_attachment`**
 
 Legacy DynamoDB 记录（`entity_type = "role_permission_attachment"`），连接 `role_id` 与 `permission_id`。
 
@@ -68,9 +68,9 @@ Legacy DynamoDB 记录（`entity_type = "role_permission_attachment"`），连�
 - **写路径：** 不可通过新 control-plane REST API 写入。
 - **Canonical 替代：** `principal_policy_attachment`，`principal_type = "role"`。
 
-### 4.3 `resource_grant`
+### **4.3 `resource_grant`**
 
-Legacy / 过渡期 DynamoDB 记录（`entity_type = "resource_grant"`），授予主体对特定 `schema_name` / `resource_id` 或 `filter` selector 的访问权限。
+Legacy / 过渡期 DynamoDB 记录（`entity_type = "resource_grant"`），授予主体（`user` 或 `role`）对特定 `schema_name` / `resource_id` 或 `filter` selector 的访问权限，并指定具体 `ops`。
 
 - **读路径：** 仅出现在 `ProjectAuthConfig.Legacy.Grants`。
 - **Canonical 替代：** 单 statement `policy_profile` + 对应的 `principal_policy_attachment`。
@@ -78,11 +78,11 @@ Legacy / 过渡期 DynamoDB 记录（`entity_type = "resource_grant"`），授�
 
 ---
 
-## 5. JWT Permission Claims
+## **5. JWT Permission Claims**
 
 JWT `permissions` claim（如 `["controlplane.admin", "notes:read"]`）是**运行时兼容字段**。
 
-- 由 `permissionsFromRequest`（`internal/request_identity.go`）从 JWT 中读取，被控制面 admin check（`controlplane.admin`）等 authorizer 消费。
+- 由 `permissionsFromRequest`（`internal/request_authz_claims.go`）从 JWT 中读取，被控制面 admin check（`controlplane.admin`）等 authorizer 消费。
 - 它**不是** canonical 授权模型，只是令牌签发时刻的快照。
 - `aaa.md` §2.4 设计明确指出：*"权限必须动态评估，以反映实时策略变化。不要把权限直接嵌入 JWT。"*
 - 长期方向是在 JWT 中保留 `role_ids`，在请求时从 control-plane store 动态评估权限/策略。
@@ -91,31 +91,31 @@ JWT `permissions` claim（如 `["controlplane.admin", "notes:read"]`）是**运�
 
 ---
 
-## 6. 迁移语义
+## **6. 迁移语义**
 
 `MigrateProjectAuthRecords` 操作（`internal/control_plane_auth_migration.go`）将 legacy auth 记录转换为 canonical policy 模型。以下规则已锁定：
 
-### 6.1 Source → Target 映射
+### **6.1 Source → Target 映射**
 
 | Legacy source（entity_type） | 生成 target |
 | --------------------------- | ----------- |
 | `permission_profile` | `policy_profile` —— 每个 permission 生成一个 policy；policy document 由 permission 的 `rule`、`outcome`、`permission_name` 合成 |
 | `role_permission_attachment`（permission 存在） | `principal_policy_attachment` —— 将生成的 permission-policy 绑定到 role 主体 |
-| `role_permission_attachment`（permission 缺失） | `role_permission_attachment` —— 以 canonical SK 格式保留原样（发出缺失 permission 警告） |
+| `role_permission_attachment`（permission 缺失） | `role_permission_attachment` —— 以 canonical SK 格式保留原样 |
 | `resource_grant`（格式良好） | `policy_profile` + `principal_policy_attachment` —— 由 grant 生成单 statement policy，绑定到原主体 |
-| `resource_grant`（不支持的形状） | 保留原样并发出警告（`unsupported_grant_selector`） |
+| `resource_grant`（不支持的形状） | 保留原样并发出警告 |
 | `policy_profile`（legacy PK） | `policy_profile`（canonical PK）—— document 由 `statement` 规范化为 `statements` |
-| `user_role`（legacy PK） | `user_role`（canonical SK） |
+| `user_role_attachment`（legacy PK） | `user_role_attachment`（canonical SK） |
 | `session` / `session_child` | 以 canonical PK 保留 |
 
-### 6.2 关键规则
+### **6.2 关键规则**
 
 - **Policy 不依赖 permission。** permission-to-policy 迁移生成独立的 `policy_profile`；迁移后生成的政策是自包含的。
 - **迁移仅限 DynamoDB。** Postgres 后端部署不需要迁移；其数据已经是 canonical 形态。
 - **迁移是幂等的。** `force=true` 时覆盖已有 canonical 记录；无 `force` 时跳过已有 target。
 - **Legacy 记录不会被删除。** 迁移写入 canonical 记录，但不会移除 legacy source item。
 
-### 6.3 结果计数器
+### **6.3 结果计数器**
 
 `MigrateProjectAuthRecordsResult` 暴露三个计数层：
 
@@ -127,9 +127,9 @@ JWT `permissions` claim（如 `["controlplane.admin", "notes:read"]`）是**运�
 
 ---
 
-## 7. 控制面 / API 影响
+## **7. 控制面 / API 影响**
 
-### 7.1 公共 REST DTO
+### **7.1 公共 REST DTO**
 
 `GET /api/v1/auth/config` 快照（`control-plane-aaa-org-chart-rest-api-design.md` §9）返回：
 
@@ -141,17 +141,17 @@ Legacy 数据（`permissions`、`role_permissions`、`grants`）**归于 `legacy
 
 DTO 对齐设计（`control-plane-auth-dto-alignment-design.md`）已执行此约束。
 
-### 7.2 写 API
+### **7.2 写 API**
 
-新 `POST /api/v1/auth/policies` 和 `PUT /api/v1/auth/principals/{type}/{id}/policies/{policy_id}` 操作 canonical 模型。它们**不创建** `permission_profile` 或 `role_permission_attachment` 记录。
+**拟议的**写 API（如 `POST /api/v1/auth/policies`、`PUT /api/v1/auth/principals/{type}/{id}/policies/{policy_id}`）尚未实现（见 §8）。一旦实现，它们将操作 canonical 模型，且**不创建** `permission_profile` 或 `role_permission_attachment` 记录。
 
-### 7.3 语义层
+### **7.3 语义层**
 
 语义层（`semantic-layer-v1-design.md`）以 `sem:policy:{project_id}:{policy_id}` 注册 `policy` 资源，来源于 `policy_profile` 记录。它**不注册** `permission_profile` 记录作为语义资源。
 
 ---
 
-## 8. Out of Scope
+## **8. Out of Scope**
 
 本 RFC **不**做以下事项：
 
@@ -166,7 +166,7 @@ DTO 对齐设计（`control-plane-auth-dto-alignment-design.md`）已执行此�
 
 ---
 
-## 9. 验收标准对照
+## **9. 验收标准对照**
 
 对照父 issue [#330](https://github.com/Lychee-Technology/ltbase.api/issues/330)：
 
@@ -191,7 +191,7 @@ DTO 对齐设计（`control-plane-auth-dto-alignment-design.md`）已执行此�
 
 ---
 
-## 参考
+## **参考**
 
 - `rfc/EN/aaa.md` — AAA 架构规范；定义统一 `policy_profile` 模型（§4.1）
 - `rfc/EN/aaa-control-plane-store-mapping.md` — store 映射；显式排除 legacy 记录族（§2 Note）
