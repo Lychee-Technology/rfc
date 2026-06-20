@@ -437,7 +437,7 @@ Additional notes:
 
 #### Model Data Placeholders
 
-`models[].data` values may contain `${note.*}` placeholders. The server automatically replaces them after the note is created and the summary is generated, before models are persisted to Forma.
+`models[].data` values may contain `${note.*}` placeholders. The server resolves them after the summary is generated and just before the note and its models are persisted to Forma. The values used (`note_id`, timestamps, summary, type, raw data) are all computed at this point.
 
 **Supported placeholders:**
 
@@ -458,6 +458,8 @@ Additional notes:
 **Merge with AI extraction results:** Request `models[].data` fields take precedence over AI-extracted values. When the same key appears in both, the request value wins. AI-only fields are preserved.
 
 **Effect on AI extraction schema:** When a model field uses a placeholder in the request, that field is removed from the structured output schema sent to Gemini, so the AI is not asked to generate it.
+
+**Models built entirely from placeholders:** Because placeholder fields are stripped from the AI schema (see above), a model whose fields are *all* placeholders leaves the AI nothing to extract. On the AI-extraction path this is treated as a failed extraction for that model type, and the model is **not persisted** (surfaced through the model sync status). The very-short-text path skips AI extraction and keeps request models as-is, so placeholder-only models *are* persisted there. To reliably persist a model on the AI path, include at least one non-placeholder field that the AI can extract.
 
 **Notes:** Unrecognized placeholders remain as-is in the original string. New code should use the `${note.*}` style. Placeholders apply only to model data persistence during note creation; they do not affect summary updates or AI model configuration.
 

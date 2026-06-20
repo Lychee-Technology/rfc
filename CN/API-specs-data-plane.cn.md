@@ -437,7 +437,7 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 
 #### Model Data Placeholders
 
-`models[].data` 中可使用 `${note.*}` placeholders，服务端会在 note 创建并生成 summary 后、写入 Forma 前自动替换。
+`models[].data` 中可使用 `${note.*}` placeholders，服务端会在 summary 生成后、note 与 models 写入 Forma 前自动替换。替换所用的值（`note_id`、时间戳、summary、type、原始数据）在此时均已计算完成。
 
 **支持的 placeholders：**
 
@@ -458,6 +458,8 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 **与 AI 抽取结果的合并：** 请求 `models[].data` 中的字段优先级高于 AI 抽取结果。当二者重名时，以请求值为准。AI 独有的字段会保留。
 
 **对 AI 抽取 schema 的影响：** 若某个 model 字段在请求中使用了 placeholder，该字段会从发送给 Gemini 的结构化输出 schema 中移除，不再要求 AI 生成。
+
+**全部由 placeholder 构成的 model：** 由于 placeholder 字段会从 AI schema 中被移除（见上），若某个 model 的字段全部是 placeholder，则 AI 无可抽取的内容。在 AI 抽取路径下，该 model type 会被视为抽取失败，**不会被持久化**（通过 model sync status 反映）。very-short-text 路径会跳过 AI 抽取、直接保留请求中的 models，因此在该路径下纯 placeholder 的 model 仍会被持久化。若需在 AI 路径下稳定持久化某个 model，请至少包含一个可供 AI 抽取的非 placeholder 字段。
 
 **注意事项：** 不支持的 placeholder 不会被替换，原字符串保留。建议新代码统一使用 `${note.*}` 写法。Placeholder 仅用于 create note 流程中的 model data 持久化，不用于更新 summary 或直接配置 AI 参数。
 
