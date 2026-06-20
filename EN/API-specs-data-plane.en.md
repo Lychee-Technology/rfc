@@ -435,6 +435,32 @@ Additional notes:
 - When model persistence succeeds, the response `models[]` entries include the persisted Forma `row_id`.
 - If model sync remains `pending` or no models were requested, `models[].row_id` may be absent.
 
+#### Model Data Placeholders
+
+`models[].data` values may contain `${note.*}` placeholders. The server automatically replaces them after the note is created and the summary is generated, before models are persisted to Forma.
+
+**Supported placeholders:**
+
+| Placeholder | Meaning | Example value |
+|---|---|---|
+| `${note.note_id}` | Note UUID | `550e8400-e29b-41d4-a716-446655440000` |
+| `${note.owner_id}` | Owner ID (from JWT `sub`) | `user123` |
+| `${note.summary}` | AI-generated summary | `The customer plans to view homes this weekend.` |
+| `${note.type}` | MIME type of note content | `text/plain` |
+| `${note.data}` | Raw note content | `Planning to take the family to view homes next weekend.` |
+| `${note.created_at}` | Note creation time (Unix milliseconds) | `1760000000000` |
+| `${note.updated_at}` | Note update time (Unix milliseconds) | `1760000000000` |
+
+**Legacy aliases:** `${note_id}`, `${owner_id}`, `${note_summary}`, `${note_type}`, `${note_data}`, `${note_created_at}`, `${note_updated_at}` are still supported and are equivalent to the corresponding `${note.*}` forms.
+
+**Replacement rules:** Placeholders may be used as the entire field value or embedded within a string. Nested objects and arrays are supported. Non-string values are unaffected. All replacement results are strings.
+
+**Merge with AI extraction results:** Request `models[].data` fields take precedence over AI-extracted values. When the same key appears in both, the request value wins. AI-only fields are preserved.
+
+**Effect on AI extraction schema:** When a model field uses a placeholder in the request, that field is removed from the structured output schema sent to Gemini, so the AI is not asked to generate it.
+
+**Notes:** Unrecognized placeholders remain as-is in the original string. New code should use the `${note.*}` style. Placeholders apply only to model data persistence during note creation; they do not affect summary updates or AI model configuration.
+
 ### 5.3 `GET /api/ai/v1/notes`
 
 Purpose: List notes for the current JWT user.

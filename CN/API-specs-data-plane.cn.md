@@ -435,6 +435,32 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 - 当 model 持久化成功后，响应中的 `models[]` 会包含对应 Forma 实体的 `row_id`。
 - 若 model sync 仍为 `pending`，或本次未请求 `models`，则 `models[].row_id` 可以不存在。
 
+#### Model Data Placeholders
+
+`models[].data` 中可使用 `${note.*}` placeholders，服务端会在 note 创建并生成 summary 后、写入 Forma 前自动替换。
+
+**支持的 placeholders：**
+
+| Placeholder | 含义 | 示例值 |
+|---|---|---|
+| `${note.note_id}` | Note UUID | `550e8400-e29b-41d4-a716-446655440000` |
+| `${note.owner_id}` | Owner ID（来自 JWT `sub`） | `user123` |
+| `${note.summary}` | AI 生成的 summary | `客户计划周末看房` |
+| `${note.type}` | note 原始内容的 MIME type | `text/plain` |
+| `${note.data}` | note 原始内容 | `计划下周末带家人看房。` |
+| `${note.created_at}` | note 创建时间（Unix 毫秒） | `1760000000000` |
+| `${note.updated_at}` | note 更新时间（Unix 毫秒） | `1760000000000` |
+
+**兼容旧写法：** `${note_id}`、`${owner_id}`、`${note_summary}`、`${note_type}`、`${note_data}`、`${note_created_at}`、`${note_updated_at}` 仍然支持，效果等价于对应的 `${note.*}` 写法。
+
+**替换规则：** Placeholder 可单独作为字段值，也可嵌入字符串中，支持嵌套对象和数组。非字符串值不受影响。替换结果均为字符串类型。
+
+**与 AI 抽取结果的合并：** 请求 `models[].data` 中的字段优先级高于 AI 抽取结果。当二者重名时，以请求值为准。AI 独有的字段会保留。
+
+**对 AI 抽取 schema 的影响：** 若某个 model 字段在请求中使用了 placeholder，该字段会从发送给 Gemini 的结构化输出 schema 中移除，不再要求 AI 生成。
+
+**注意事项：** 不支持的 placeholder 不会被替换，原字符串保留。建议新代码统一使用 `${note.*}` 写法。Placeholder 仅用于 create note 流程中的 model data 持久化，不用于更新 summary 或直接配置 AI 参数。
+
 ### 5.3 `GET /api/ai/v1/notes`
 
 用途：按当前 JWT 用户列出 note。
