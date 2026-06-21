@@ -6,7 +6,7 @@
   - `ltbase.api/cmd/controlplane`
   - `rfc/CN/aaa.md`
 - 文档语言：中文
-- 更新日期：2026-05-25
+- 更新日期：2026-06-20
 
 ## 1. 总览
 
@@ -147,6 +147,20 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `migrate-authz-policy-model`
 - catalog put/get actions
 - `import-referrals`
+
+### 3.3 REST ↔ Action 映射
+
+| REST API | `/control-plane` action | CLI (`cmd/tools`) |
+|---|---|---|
+| `POST /api/v1/auth/policies` | `create-iam-authz-records`（*） | **无** |
+| `POST /api/v1/auth/referrals?import=1` | `import-referrals` | **无** |
+| `GET /api/v1/auth/policies` | `list-project-auth-config` | **无** |
+
+说明：
+
+- （*）`create-iam-authz-records` 是一个更底层的批量种子写入 action。REST `POST /api/v1/auth/policies` 会自动生成 durable `policy_id`；`create-iam-authz-records` 要求调用方显式提供 `policy_id`。action 适用于种子数据、迁移和运维批量写入，REST endpoint 是产品化管理合同。
+- `cmd/tools` CLI 目前仅暴露 `ensure-project`、`repair-project`、`update-schema`，**不**暴露 policy 或 referral 管理子命令。这些流程请使用 Control Plane Lambda action API 或 HTTP REST API。
+- `list-project-auth-config` 返回完整的 project auth 快照（users、roles、policies、binding policies、referrals、attachments、warnings），比 `GET /api/v1/auth/policies` 范围更广。
 
 ## 4. 通用数据结构
 
@@ -600,3 +614,180 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 - `ensure-project`、repair、schema、catalog、migration 等仍保留在 `/control-plane`
 - `migrate-authz-policy-model` 是运维 action，不是 `/api/v1/...` REST endpoint
 - admin REST 合约是 resource-oriented，而 `/control-plane` 是 action-oriented
+
+### 7.1 通用请求字段
+
+所有 `/control-plane` action 共用以下顶层 JSON 字段（`ControlPlaneRequest`）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `action` | string | 是 | 操作名称 |
+| `project_id` | UUID string | 视 action 而定 | 目标 project UUID |
+| `data` | JSON array/object | 视 action 而定 | action 数据载荷 |
+| `dry_run` | bool | 否 | 预览模式，不实际写入 |
+| `force` | bool | 否 | 覆盖已存在的冲突记录 |
+
+`dry_run` 和 `force` 仅被显式声明支持的 action 识别（如 `create-iam-authz-records`）。`import-referrals` 会忽略二者。
+
+响应 envelope：
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "status": "success",
+  "result": {}
+}
+```
+
+### 7.2 `create-iam-authz-records`
+
+用途：为 project 批量创建 IAM/authz 记录（role profile、policy profile、principal-policy attachment 和 user-role attachment）。
+
+这是一个更底层的种子/迁移 action。产品化 policy 管理请使用 `POST /api/v1/auth/policies`（见 `API-specs-auth-service.cn.md`）。
+
+**支持的 `kind`：**
+
+| Kind | 必填字段 | 用途 |
+|---|---|---|
+| `role_profile` | `role_id`、`name` | 创建角色 |
+| `policy_profile` | `policy_id`、`name` | 创建含 policy document 的授权策略 |
+| `principal_policy_attachment` | `principal_type`、`principal_id`、`policy_id` | 将 policy 绑定到 user 或 role |
+| `user_role_attachment` | `user_id`、`role_id` | 给 user 分配 role |
+
+**示例：policy profile**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "policy.lead.read",
+      "name": "Lead Read",
+      "slug": "lead.read",
+      "external_key": "lead-read-v1",
+      "policy_document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "ops": ["read"],
+            "schema": "lead",
+            "selector": { "resource_id": ["*"] }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`policy_profile` 的 `data[]` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `kind` | string | 是 | 必须为 `"policy_profile"` |
+| `policy_id` | string | 是 | durable policy 标识 |
+| `name` | string | 是 | 可读名称 |
+| `slug` | string | 否 | 语义 slug（如 `"lead.read"`） |
+| `external_key` | string | 否 | 外部引用 key |
+| `policy_document` | JSON object 或 JSON string | 否 | policy 语句；见 `rfc/CN/aaa.md` §6 |
+
+**示例：role profile + principal-policy attachment**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "kind": "role_profile",
+      "role_id": "role.sales",
+      "name": "Sales",
+      "slug": "role.sales"
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "role",
+      "principal_id": "role.sales",
+      "policy_id": "policy.lead.read"
+    }
+  ]
+}
+```
+
+说明：
+
+- `force` 标志允许覆盖已存在记录。
+- `dry_run` 返回计数但不写入。
+- 写入 `policy_profile` 会自动触发语义 project reseed。
+- 与 `POST /api/v1/auth/policies` 不同，该 action **不会**生成 `policy_id`；调用方必须提供。
+- 该 action 按原样存储 `policy_document`（仅校验为合法 JSON 并压缩），**不**校验文档内部结构。statement 的规范 schema 由 `rfc/CN/aaa.md` §6 定义，以其为准。
+
+### 7.3 `import-referrals`
+
+用途：向 project 导入一个或多个 referral code，可附带绑定的 policy ID。
+
+该 action 对应 REST API 的 `POST /api/v1/auth/referrals?import=1`（见 `API-specs-auth-service.cn.md`）。
+
+**批量模式**（通过 `data` 数组）：
+
+```json
+{
+  "action": "import-referrals",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "referral_code": "CODE001",
+      "policy_id": "policy.lead.read",
+      "expires_at_ms": 1767139200000
+    },
+    {
+      "referral_code": "CODE002"
+    }
+  ]
+}
+```
+
+`data[]` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `referral_code` | string | 是 | referral code，最长 256 字符 |
+| `policy_id` | string | 否 | durable policy id 或 slug；写入时解析为 durable id 存储。不存在或无效 policy 返回错误。 |
+| `expires_at_ms` | int64 或 string | 否 | 过期时间（epoch 毫秒）。省略、`0` 或空表示永不过期。 |
+| `project_id` | UUID string | 否 | 单条记录的 project ID（如与顶层 `project_id` 冲突会报错）。 |
+
+**单条模式**（不用 `data`，使用顶层字段）：
+
+```json
+{
+  "action": "import-referrals",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "referral_code": "CODE001",
+  "referral_policy_id": "policy.lead.read",
+  "referral_expires_at_ms": 1767139200000
+}
+```
+
+**响应：**
+
+```json
+{
+  "action": "import-referrals",
+  "status": "success",
+  "result": {
+    "total": 2,
+    "imported": 1,
+    "skipped_existing": 1
+  }
+}
+```
+
+行为说明：
+
+- 已存在的 referral code 会被**跳过**（条件写入），计入 `skipped_existing`。
+- `policy_id` 在写入时即时校验：引用不存在的 policy 返回 `policy_not_found` 错误。
+- 当 `policy_id` 为 slug 时，写入前会解析为 durable `policy_id`。
+- 省略 `policy_id` 保持旧绑定行为（身份绑定时不会自动附加 policy）。
+- 在 REST referral 资源上，`PATCH /api/v1/auth/referrals/{code}` 仅接受 `expires_at_ms`；`policy_id` 不是可接受的 PATCH 字段，会被静默忽略（而非报错拒绝）。绑定在创建后可视为不可变。
