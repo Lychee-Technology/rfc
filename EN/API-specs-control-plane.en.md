@@ -6,7 +6,7 @@ This document describes the approved control-plane admin REST API contract under
   - `ltbase.api/cmd/controlplane`
   - `rfc/EN/aaa.md`
 - Document language: English
-- Updated on: 2026-05-25
+- Updated on: 2026-06-20
 
 ## 1. Overview
 
@@ -147,6 +147,20 @@ The following remain under `/control-plane` as operational actions rather than a
 - `migrate-authz-policy-model`
 - catalog put/get actions
 - `import-referrals`
+
+### 3.3 REST ↔ Action Mapping Summary
+
+| REST API | `/control-plane` action | CLI (`cmd/tools`) |
+|---|---|---|
+| `POST /api/v1/auth/policies` | `create-iam-authz-records` (*) | **none** |
+| `POST /api/v1/auth/referrals?import=1` | `import-referrals` | **none** |
+| `GET /api/v1/auth/policies` | `list-project-auth-config` | **none** |
+
+Notes:
+
+- (*) `create-iam-authz-records` is a lower-level batch seed action. The REST `POST /api/v1/auth/policies` auto-generates a durable `policy_id`; `create-iam-authz-records` requires the caller to supply `policy_id` explicitly. The action is suitable for seeding, migration, and operational bulk writes, while the REST endpoint is the productized admin contract.
+- The `cmd/tools` CLI currently exposes only `ensure-project`, `repair-project`, and `update-schema`. It does **not** expose a policy or referral management subcommand. Use the Control Plane Lambda action API or the HTTP REST API for those workflows.
+- `list-project-auth-config` returns the full project auth snapshot (users, roles, policies, binding policies, referrals, attachments, and warnings), which is broader than `GET /api/v1/auth/policies`.
 
 ## 4. Common Data Structures
 
@@ -600,3 +614,178 @@ In particular:
 - `/control-plane` remains the home of `ensure-project`, repair, schema, catalog, and migration actions
 - `migrate-authz-policy-model` is an operational action, not a `/api/v1/...` REST endpoint
 - the admin REST contract is resource-oriented, while `/control-plane` is action-oriented
+
+### 7.1 Common Request Fields
+
+All `/control-plane` actions share the following top-level JSON fields (`ControlPlaneRequest`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | yes | Action name |
+| `project_id` | UUID string | varies | Target project UUID |
+| `data` | JSON array/object | varies | Action payload |
+| `dry_run` | bool | no | Preview mode; no writes |
+| `force` | bool | no | Overwrite existing conflicting records |
+
+Response envelope:
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "status": "success",
+  "result": {}
+}
+```
+
+### 7.2 `create-iam-authz-records`
+
+Purpose: Bulk-create IAM/authz records (role profiles, policy profiles, principal-policy attachments, and user-role attachments) for a project.
+
+This is a lower-level seed/migration action. For the productized policy management contract, use `POST /api/v1/auth/policies` (see `API-specs-auth-service.en.md`).
+
+**Supported `kind` values:**
+
+| Kind | Required fields | Purpose |
+|---|---|---|
+| `role_profile` | `role_id`, `name` | Create a role |
+| `policy_profile` | `policy_id`, `name` | Create an auth policy with a policy document |
+| `principal_policy_attachment` | `principal_type`, `principal_id`, `policy_id` | Attach a policy to a user or role |
+| `user_role_attachment` | `user_id`, `role_id` | Assign a role to a user |
+
+**Example: policy profile**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "policy.lead.read",
+      "name": "Lead Read",
+      "slug": "lead.read",
+      "external_key": "lead-read-v1",
+      "policy_document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "schema": "lead",
+            "ops": ["read"],
+            "resource_id": "*"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+`data[]` fields for `policy_profile`:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | string | yes | Must be `"policy_profile"` |
+| `policy_id` | string | yes | Durable policy identifier |
+| `name` | string | yes | Human-readable name |
+| `slug` | string | no | Semantic slug for lookup (e.g. `"lead.read"`) |
+| `external_key` | string | no | External reference key |
+| `policy_document` | JSON object or JSON string | no | Policy statements; see `rfc/EN/aaa.md` §6 |
+
+**Example: role profile with principal-policy attachment**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "kind": "role_profile",
+      "role_id": "role.sales",
+      "name": "Sales",
+      "slug": "role.sales"
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "role",
+      "principal_id": "role.sales",
+      "policy_id": "policy.lead.read"
+    }
+  ]
+}
+```
+
+Notes:
+
+- The `force` flag allows overwriting existing records.
+- `dry_run` returns counts without writing.
+- A `policy_profile` write triggers an automatic semantic project reseed.
+- Unlike `POST /api/v1/auth/policies`, this action does **not** generate a `policy_id`; the caller provides it.
+- The `policy_document.statements` schema follows the canonical AAA model (`rfc/EN/aaa.md`).
+
+### 7.3 `import-referrals`
+
+Purpose: Import one or more referral codes into a project, optionally with a bound policy ID.
+
+This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST API (see `API-specs-auth-service.en.md`).
+
+**Batch mode** (via `data` array):
+
+```json
+{
+  "action": "import-referrals",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "data": [
+    {
+      "referral_code": "CODE001",
+      "policy_id": "policy.lead.read",
+      "expires_at_ms": 1767139200000
+    },
+    {
+      "referral_code": "CODE002"
+    }
+  ]
+}
+```
+
+`data[]` fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `referral_code` | string | yes | Referral code, max 256 characters |
+| `policy_id` | string | no | Durable policy ID or slug; resolved to durable ID before storage. Invalid/missing policy returns an error. |
+| `expires_at_ms` | int64 or string | no | Expiration in epoch milliseconds. Omitting, `0`, or empty means never expires. |
+| `project_id` | UUID string | no | Per-item project ID (must match top-level `project_id` if both are present). |
+
+**Single-item mode** (without `data`, using top-level fields):
+
+```json
+{
+  "action": "import-referrals",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "referral_code": "CODE001",
+  "referral_policy_id": "policy.lead.read",
+  "referral_expires_at_ms": 1767139200000
+}
+```
+
+**Response:**
+
+```json
+{
+  "action": "import-referrals",
+  "status": "success",
+  "result": {
+    "total": 2,
+    "imported": 1,
+    "skipped_existing": 1
+  }
+}
+```
+
+Behavior notes:
+
+- Existing referral codes are **skipped** (conditional write) and counted as `skipped_existing`.
+- `policy_id` is validated at write time: unknown policies return a `policy_not_found` error.
+- When `policy_id` is a slug, it is resolved to the durable `policy_id` before persistence.
+- Omitting `policy_id` preserves legacy binding behavior (no automatic policy attachment on identity binding).
+- `policy_id` is immutable after creation; PATCH does not accept it.
