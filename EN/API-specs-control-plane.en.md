@@ -627,6 +627,8 @@ All `/control-plane` actions share the following top-level JSON fields (`Control
 | `dry_run` | bool | no | Preview mode; no writes |
 | `force` | bool | no | Overwrite existing conflicting records |
 
+`dry_run` and `force` are honored only by actions that document support for them (e.g. `create-iam-authz-records`). `import-referrals` ignores both.
+
 Response envelope:
 
 ```json
@@ -669,9 +671,9 @@ This is a lower-level seed/migration action. For the productized policy manageme
         "statements": [
           {
             "effect": "allow",
-            "schema": "lead",
             "ops": ["read"],
-            "resource_id": "*"
+            "schema": "lead",
+            "selector": { "resource_id": ["*"] }
           }
         ]
       }
@@ -720,7 +722,7 @@ Notes:
 - `dry_run` returns counts without writing.
 - A `policy_profile` write triggers an automatic semantic project reseed.
 - Unlike `POST /api/v1/auth/policies`, this action does **not** generate a `policy_id`; the caller provides it.
-- The `policy_document.statements` schema follows the canonical AAA model (`rfc/EN/aaa.md`).
+- The action stores `policy_document` verbatim (validated only as well-formed JSON, then compacted); it does **not** validate the document's internal shape. The canonical statement schema is defined in `rfc/EN/aaa.md` §6, which is authoritative.
 
 ### 7.3 `import-referrals`
 
@@ -788,4 +790,4 @@ Behavior notes:
 - `policy_id` is validated at write time: unknown policies return a `policy_not_found` error.
 - When `policy_id` is a slug, it is resolved to the durable `policy_id` before persistence.
 - Omitting `policy_id` preserves legacy binding behavior (no automatic policy attachment on identity binding).
-- `policy_id` is immutable after creation; PATCH does not accept it.
+- On the REST referral resource, `PATCH /api/v1/auth/referrals/{code}` accepts only `expires_at_ms`; `policy_id` is not an accepted PATCH field and is silently ignored (not rejected). Treat the binding as effectively immutable after creation.

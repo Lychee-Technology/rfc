@@ -627,6 +627,8 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 | `dry_run` | bool | 否 | 预览模式，不实际写入 |
 | `force` | bool | 否 | 覆盖已存在的冲突记录 |
 
+`dry_run` 和 `force` 仅被显式声明支持的 action 识别（如 `create-iam-authz-records`）。`import-referrals` 会忽略二者。
+
 响应 envelope：
 
 ```json
@@ -669,9 +671,9 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
         "statements": [
           {
             "effect": "allow",
-            "schema": "lead",
             "ops": ["read"],
-            "resource_id": "*"
+            "schema": "lead",
+            "selector": { "resource_id": ["*"] }
           }
         ]
       }
@@ -720,7 +722,7 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 - `dry_run` 返回计数但不写入。
 - 写入 `policy_profile` 会自动触发语义 project reseed。
 - 与 `POST /api/v1/auth/policies` 不同，该 action **不会**生成 `policy_id`；调用方必须提供。
-- `policy_document.statements` 遵循统一 AAA 模型（`rfc/CN/aaa.md`）。
+- 该 action 按原样存储 `policy_document`（仅校验为合法 JSON 并压缩），**不**校验文档内部结构。statement 的规范 schema 由 `rfc/CN/aaa.md` §6 定义，以其为准。
 
 ### 7.3 `import-referrals`
 
@@ -788,4 +790,4 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 - `policy_id` 在写入时即时校验：引用不存在的 policy 返回 `policy_not_found` 错误。
 - 当 `policy_id` 为 slug 时，写入前会解析为 durable `policy_id`。
 - 省略 `policy_id` 保持旧绑定行为（身份绑定时不会自动附加 policy）。
-- `policy_id` 创建后不可变，PATCH 不接受该字段。
+- 在 REST referral 资源上，`PATCH /api/v1/auth/referrals/{code}` 仅接受 `expires_at_ms`；`policy_id` 不是可接受的 PATCH 字段，会被静默忽略（而非报错拒绝）。绑定在创建后可视为不可变。
