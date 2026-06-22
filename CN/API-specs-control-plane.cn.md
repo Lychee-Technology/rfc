@@ -162,6 +162,29 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `cmd/tools` CLI 目前仅暴露 `ensure-project`、`repair-project`、`update-schema`，**不**暴露 policy 或 referral 管理子命令。这些流程请使用 Control Plane Lambda action API 或 HTTP REST API。
 - `list-project-auth-config` 返回完整的 project auth 快照（users、roles、policies、binding policies、referrals、attachments、warnings），比 `GET /api/v1/auth/policies` 范围更广。
 
+### 3.4 内置资源（Built-in Resources）
+
+control plane 管理一组固定的**内置资源**。它们通过各自的 REST endpoint 和 `/control-plane` action 管理——**不是** authz policy 的 `schema` 目标，也不能通过写 policy statement 来授权（例如不存在 `schema: "users"` 或 `schema: "org_units"` 这样的 statement）。control-plane 级别的 admin 是单一的、基于绑定的授权：将 `admin.controlplane` policy 绑定到 principal（见 §7.2）。
+
+每个概念在不同层各自有一致的命名（同一资源在 REST route、JSON 字段、action `kind` 中可能拼写不同）：
+
+| 资源 | JSON（`list-project-auth-config`） | REST route | Action `kind` |
+|---|---|---|---|
+| Users | `users`（单项：`user`） | `/api/v1/auth/users` | —（由身份层管理） |
+| Roles | `roles`（单项：`role`） | `/api/v1/auth/roles` | `role_profile` |
+| Policies | `policies`（单项：`policy`） | `/api/v1/auth/policies` | `policy_profile` |
+| Binding policies | `binding_policies` | `/api/v1/auth/binding-policies` | — |
+| 组织架构 / org units | `org_units`（OU；标识 `ou_id` / `parent_ou_id` / `ou_path`） | `/api/v1/org/units`（只读视图：`/api/v1/org/charts`） | — |
+| OU-policy 绑定 | `ou_policy_attachments` | `/api/v1/org/units/{ou_id}/policies` | — |
+| Principal-policy 绑定 | `principal_policy_attachments` | `/api/v1/auth/principals/{type}/{id}/policies` | `principal_policy_attachment` |
+| User-role 绑定 | （归在 users 下） | `/api/v1/auth/users/{user_id}/roles/{role_id}` | `user_role_attachment` |
+| Referrals | `referrals` | `/api/v1/auth/referrals` | （通过 `import-referrals`） |
+
+说明：
+
+- **“组织架构 / org chart”是概念词，不是资源名。** 数据模型是 **org units**（`org_units` / OU）。层级通过 `parent_ou_id` 和物化的 `ou_path` 编码；`/api/v1/org/charts` 只是该树的只读渲染。见 `aaa.md` §5.7。
+- org units 和 OU-policy 绑定仅通过 `/api/v1/org/...` REST endpoint 管理；`create-iam-authz-records` 没有对应的 `kind`。
+
 ## 4. 通用数据结构
 
 ### 4.1 ControlPlaneUser
@@ -741,15 +764,7 @@ Control Plane Admin API 要求调用者持有 admin policy。`slug` 必须为 `a
       "external_key": "controlplane-admin-v1",
       "name": "Control Plane Admin",
       "description": "Full access to control plane admin APIs",
-      "policy_document": {
-        "statements": [
-          {
-            "effect": "allow",
-            "resource": "controlplane",
-            "ops": ["admin"]
-          }
-        ]
-      }
+      "policy_document": { "statements": [] }
     },
     {
       "kind": "principal_policy_attachment",
@@ -761,7 +776,7 @@ Control Plane Admin API 要求调用者持有 admin policy。`slug` 必须为 `a
 }
 ```
 
-admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检查；鉴权唯一路径是通过 `principal_policy_attachment` 将 admin policy 绑定到用户（或通过角色间接绑定，先将 policy 绑定到 role，再将 role 分配给用户）。
+admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检查；鉴权唯一路径是通过 `principal_policy_attachment` 将 admin policy 绑定到用户（或通过角色间接绑定，先将 policy 绑定到 role，再将 role 分配给用户）。因此空的 `statements` 列表即可。control-plane admin 是单一的、基于绑定的授权，而非按资源的 op：`controlplane` 不是 entity schema，`admin` 也不是合法 op——entity statement 通过 `schema` 配合 `selector` 限定实体，op 仅限 `create` / `read` / `update` / `delete` / `*`（见 `aaa.md` §6）。
 
 如果已通过 REST Admin API 存在 admin，也可以使用 REST 绑定：`PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`，其中 `admin.controlplane` 作为 slug 解析。
 

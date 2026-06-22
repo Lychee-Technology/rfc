@@ -2,6 +2,8 @@
 
 This RFC resolves the semantic ambiguity between `policy` and `permission` in LTBase auth and control-plane terminology. It defines the canonical model, identifies legacy compatibility surfaces, and specifies migration semantics.
 
+> For the canonical per-layer names of the built-in control-plane resources (users, roles, policies, binding policies, org units, attachments, referrals), see `API-specs-control-plane.en.md` §3.4 (Built-in Resources).
+
 **Status:** Accepted (issue [#330](https://github.com/Lychee-Technology/ltbase.api/issues/330), [#337](https://github.com/Lychee-Technology/ltbase.api/issues/337))
 
 ---

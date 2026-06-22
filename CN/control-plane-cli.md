@@ -286,19 +286,13 @@ Control Plane Admin API 要求调用者持有 admin policy。以下示例展示�
       "external_key": "controlplane-admin-v1",
       "name": "Control Plane Admin",
       "description": "Full access to control plane admin APIs",
-      "policy_document": {
-        "statements": [
-          {
-            "effect": "allow",
-            "resource": "controlplane",
-            "ops": ["admin"]
-          }
-        ]
-      }
+      "policy_document": { "statements": [] }
     }
   ]
 }
 ```
+
+> control-plane admin 鉴权不检查 `policy_document` 内容，授权完全取决于下面的 `principal_policy_attachment` 绑定，因此空的 `statements` 列表即可。`controlplane` 不是 entity schema，`admin` 也不是合法 op——entity statement 通过 `schema` 配合 `selector` 限定实体，op 仅限 `create` / `read` / `update` / `delete` / `*`（见 `aaa.md` §6）。
 
 **绑定 admin policy 给用户（直接绑定）：**
 
