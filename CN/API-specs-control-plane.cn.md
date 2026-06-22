@@ -724,6 +724,47 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 - 与 `POST /api/v1/auth/policies` 不同，该 action **不会**生成 `policy_id`；调用方必须提供。
 - 该 action 按原样存储 `policy_document`（仅校验为合法 JSON 并压缩），**不**校验文档内部结构。statement 的规范 schema 由 `rfc/CN/aaa.md` §6 定义，以其为准。
 
+**示例：创建 Control Plane Admin Policy 并绑定给用户**
+
+Control Plane Admin API 要求调用者持有 admin policy。`slug` 必须为 `admin.controlplane`；control-plane 鉴权通过 slug 解析到 durable policy ID。旧布局迁移产生的 `generated#permission#controlplane.admin` 仅作为兼容回退识别。
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002",
+      "slug": "admin.controlplane",
+      "external_key": "controlplane-admin-v1",
+      "name": "Control Plane Admin",
+      "description": "Full access to control plane admin APIs",
+      "policy_document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "resource": "controlplane",
+            "ops": ["admin"]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "user",
+      "principal_id": "<USER_ID>",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002"
+    }
+  ]
+}
+```
+
+admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检查；鉴权唯一路径是通过 `principal_policy_attachment` 将 admin policy 绑定到用户（或通过角色间接绑定，先将 policy 绑定到 role，再将 role 分配给用户）。
+
+如果已通过 REST Admin API 存在 admin，也可以使用 REST 绑定：`PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`，其中 `admin.controlplane` 作为 slug 解析。
+
 ### 7.3 `import-referrals`
 
 用途：向 project 导入一个或多个 referral code，可附带绑定的 policy ID。

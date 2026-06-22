@@ -724,6 +724,47 @@ Notes:
 - Unlike `POST /api/v1/auth/policies`, this action does **not** generate a `policy_id`; the caller provides it.
 - The action stores `policy_document` verbatim (validated only as well-formed JSON, then compacted); it does **not** validate the document's internal shape. The canonical statement schema is defined in `rfc/EN/aaa.md` §6, which is authoritative.
 
+**Example: Creating a Control Plane Admin Policy and Binding to a User**
+
+The Control Plane Admin API requires the caller to hold an admin policy. The `slug` must be `admin.controlplane`; the control-plane authorizer resolves the slug to the durable policy ID. The legacy migration ID `generated#permission#controlplane.admin` is only a compatibility fallback.
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002",
+      "slug": "admin.controlplane",
+      "external_key": "controlplane-admin-v1",
+      "name": "Control Plane Admin",
+      "description": "Full access to control plane admin APIs",
+      "policy_document": {
+        "statements": [
+          {
+            "effect": "allow",
+            "resource": "controlplane",
+            "ops": ["admin"]
+          }
+        ]
+      }
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "user",
+      "principal_id": "<USER_ID>",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002"
+    }
+  ]
+}
+```
+
+The admin policy's `policy_document` content is not inspected by the control-plane admin authorization check; the sole authorization path is through a `principal_policy_attachment` binding the admin policy to the user (or indirectly via a role — attach the policy to a role, then assign the role to the user).
+
+If an admin already exists via the REST Admin API, you can also bind using the REST endpoint: `PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`, where `admin.controlplane` is resolved as a slug to the durable policy ID.
+
 ### 7.3 `import-referrals`
 
 Purpose: Import one or more referral codes into a project, optionally with a bound policy ID.
