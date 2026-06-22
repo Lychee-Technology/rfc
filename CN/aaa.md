@@ -330,7 +330,7 @@ sequenceDiagram
 所有授权都通过一个概念表达 —— `policy_profile`，其内部承载一个或多个 `statement`。每个 statement 包含：
 
 * `effect` —— `allow` / `deny` / `mask`
-* `ops` —— 操作集合（`create` / `read` / `update` / `delete`）
+* `ops` —— 操作集合（`create` / `read` / `update` / `delete`，或 `*` 表示全部）
 * `schema` —— 实体范围
 * `selector` —— 行范围（`resource_id` 列表、`filter`，或二者并集）
 * `outcome` —— 可选的列级注解（哪些属性、做什么动作）
@@ -478,6 +478,9 @@ LTBase 用两条彼此独立的关系来表达组织结构：
 > [!IMPORTANT]
 > 归属与汇报是 **两条独立轴线**。用户的 manager 不需要与其位于同一 OU。
 
+> [!NOTE]
+> “org chart”是概念；数据模型是 **org units**（`org_units` / OU）。org units 及其他内置资源的 REST/JSON/action 命名见 `API-specs-control-plane.cn.md` §3.4（内置资源）。
+
 #### **5.7.1 OU 树与 Materialized Path**
 
 OU 树同时保存直接父指针 `parent_ou_id` 与 materialized `ou_path`，以支持高效子树查询：
@@ -558,7 +561,7 @@ LTBase 把所有授权决策表达为一个 **policy**，其中包含一条或�
 | 字段 | 必填 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | `effect` | 是 | enum | `allow` / `deny` / `mask` |
-| `ops` | 是 | string[] | `create` / `read` / `update` / `delete` 的子集 |
+| `ops` | 是 | string[] | `create` / `read` / `update` / `delete` 的子集，或 `*` 表示全部 |
 | `schema` | 是 | string | 该 statement 约束的实体 schema |
 | `selector` | `allow`/`deny` 至少需要 `resource_id` 或 `filter` 其一;`mask` 可选 | object | 行范围（见 6.4） |
 | `outcome` | `mask` 必填;`allow` 可选 | object | 列级注解（见 6.5） |

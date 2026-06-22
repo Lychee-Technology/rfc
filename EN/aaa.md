@@ -332,7 +332,7 @@ The authorization engine must ensure:
 All authorization is expressed through a single concept — `policy_profile` — that holds one or more `statement` items. A statement carries:
 
 * `effect` — `allow` / `deny` / `mask`
-* `ops` — set of operations (`create` / `read` / `update` / `delete`)
+* `ops` — set of operations (`create` / `read` / `update` / `delete`, or `*` for all)
 * `schema` — entity scope
 * `selector` — row scope (`resource_id` list, `filter`, or both)
 * `outcome` — optional column-level annotation (which attrs, what action)
@@ -480,6 +480,9 @@ LTBase models organizational structure with two independent relationships, model
 > [!IMPORTANT]
 > Containment and reporting are **independent** axes. A user's manager need not sit in the same OU (e.g., functional manager in a different OU). Authorization rules can reference either or both.
 
+> [!NOTE]
+> "Org chart" is the concept; the data model is **org units** (`org_units` / OU). For the REST/JSON/action names of org units and the other built-in resources, see `API-specs-control-plane.en.md` §3.4 (Built-in Resources).
+
 #### **5.7.1 OU Tree and Materialized Path**
 
 The OU tree is encoded with both a direct `parent_ou_id` pointer and a materialized `ou_path` for efficient subtree queries:
@@ -560,7 +563,7 @@ A single policy may carry mixed effects (allow / deny / mask). Combination rules
 | Field | Required | Type | Description |
 | ----- | -------- | ---- | ----------- |
 | `effect` | Yes | enum | `allow` / `deny` / `mask` |
-| `ops` | Yes | string[] | Subset of `create` / `read` / `update` / `delete` |
+| `ops` | Yes | string[] | Subset of `create` / `read` / `update` / `delete`, or `*` for all |
 | `schema` | Yes | string | Entity schema this statement scopes |
 | `selector` | At least one of `resource_id` / `filter` for `allow`/`deny`; optional for `mask` | object | Row scope (see 6.4) |
 | `outcome` | Required for `mask`; optional for `allow` | object | Column-scope annotation (see 6.5) |

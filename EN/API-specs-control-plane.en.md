@@ -162,6 +162,29 @@ Notes:
 - The `cmd/tools` CLI currently exposes only `ensure-project`, `repair-project`, and `update-schema`. It does **not** expose a policy or referral management subcommand. Use the Control Plane Lambda action API or the HTTP REST API for those workflows.
 - `list-project-auth-config` returns the full project auth snapshot (users, roles, policies, binding policies, referrals, attachments, and warnings), which is broader than `GET /api/v1/auth/policies`.
 
+### 3.4 Built-in Resources
+
+The control plane manages a fixed set of **built-in resources**. These are administered through their own REST endpoints and `/control-plane` actions — they are **not** authz policy `schema` targets, and you do not grant access to them by writing policy statements (e.g. there is no `schema: "users"` or `schema: "org_units"` statement). Control-plane-wide admin is a single binding-based grant: the `admin.controlplane` policy attached to a principal (see §7.2).
+
+Each concept is named consistently per layer (the same resource may appear with a different spelling in a REST route vs. a JSON field vs. an action `kind`):
+
+| Resource | JSON (`list-project-auth-config`) | REST route | Action `kind` |
+|---|---|---|---|
+| Users | `users` (item: `user`) | `/api/v1/auth/users` | — (identity-managed) |
+| Roles | `roles` (item: `role`) | `/api/v1/auth/roles` | `role_profile` |
+| Policies | `policies` (item: `policy`) | `/api/v1/auth/policies` | `policy_profile` |
+| Binding policies | `binding_policies` | `/api/v1/auth/binding-policies` | — |
+| Org chart / org units | `org_units` (OU; ids `ou_id` / `parent_ou_id` / `ou_path`) | `/api/v1/org/units` (read-only view: `/api/v1/org/charts`) | — |
+| OU-policy attachments | `ou_policy_attachments` | `/api/v1/org/units/{ou_id}/policies` | — |
+| Principal-policy attachments | `principal_policy_attachments` | `/api/v1/auth/principals/{type}/{id}/policies` | `principal_policy_attachment` |
+| User-role attachments | (surfaced under users) | `/api/v1/auth/users/{user_id}/roles/{role_id}` | `user_role_attachment` |
+| Referrals | `referrals` | `/api/v1/auth/referrals` | (via `import-referrals`) |
+
+Notes:
+
+- **"Org chart" is a concept word, not a resource name.** The data model is **org units** (`org_units` / OU). The hierarchy is encoded with `parent_ou_id` and a materialized `ou_path`; `/api/v1/org/charts` is only a read-only rendering of that tree. See `aaa.md` §5.7.
+- Org units and OU-policy attachments are managed only via the `/api/v1/org/...` REST endpoints; there is no `create-iam-authz-records` `kind` for them.
+
 ## 4. Common Data Structures
 
 ### 4.1 ControlPlaneUser
@@ -723,6 +746,39 @@ Notes:
 - A `policy_profile` write triggers an automatic semantic project reseed.
 - Unlike `POST /api/v1/auth/policies`, this action does **not** generate a `policy_id`; the caller provides it.
 - The action stores `policy_document` verbatim (validated only as well-formed JSON, then compacted); it does **not** validate the document's internal shape. The canonical statement schema is defined in `rfc/EN/aaa.md` §6, which is authoritative.
+
+**Example: Creating a Control Plane Admin Policy and Binding to a User**
+
+The Control Plane Admin API requires the caller to hold an admin policy. The `slug` must be `admin.controlplane`; the control-plane authorizer resolves the slug to the durable policy ID. The legacy migration ID `generated#permission#controlplane.admin` is only a compatibility fallback.
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002",
+      "slug": "admin.controlplane",
+      "external_key": "controlplane-admin-v1",
+      "name": "Control Plane Admin",
+      "description": "Full access to control plane admin APIs",
+      "policy_document": { "statements": [] }
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "user",
+      "principal_id": "<USER_ID>",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002"
+    }
+  ]
+}
+```
+
+The admin policy's `policy_document` content is not inspected by the control-plane admin authorization check; the sole authorization path is through a `principal_policy_attachment` binding the admin policy to the user (or indirectly via a role — attach the policy to a role, then assign the role to the user). An empty `statements` list is therefore sufficient. Control-plane admin is a single binding-based grant, not a per-resource op: `controlplane` is not an entity schema and `admin` is not a valid op — entity statements scope an entity via `schema` with a `selector`, and ops are limited to `create` / `read` / `update` / `delete` / `*` (see `aaa.md` §6).
+
+If an admin already exists via the REST Admin API, you can also bind using the REST endpoint: `PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`, where `admin.controlplane` is resolved as a slug to the durable policy ID.
 
 ### 7.3 `import-referrals`
 

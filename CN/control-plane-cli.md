@@ -157,8 +157,10 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `kind` | string | 是 | `"role_profile"` |
-| `role_id` | string | 是 | 角色唯一标识 |
+| `role_id` | string | 是 | 角色 durable UUIDv7 标识 |
 | `name` | string | 是 | 角色显示名称 |
+| `slug` | string | 否 | 语义 slug（如 `"role.admin"`） |
+| `external_key` | string | 否 | 外部引用 key |
 | `description` | string | 否 | 角色描述 |
 | `parent_role_ids` | string[] | 否 | 父角色 ID 列表 |
 
@@ -167,12 +169,16 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `kind` | string | 是 | `"policy_profile"` |
-| `policy_id` | string | 是 | 策略唯一标识 |
+| `policy_id` | string | 是 | 策略 durable UUIDv7 标识 |
 | `name` | string | 是 | 策略显示名称 |
+| `slug` | string | 否 | 语义 slug（如 `"admin.controlplane"`、`"lead.read"`） |
+| `external_key` | string | 否 | 外部引用 key |
 | `description` | string | 否 | 策略描述 |
 | `policy_document` | JSON object / string | 否 | 策略文档 |
 
 ##### `role_permission_attachment`
+
+> 已废弃，不再接受写入。
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -186,9 +192,9 @@
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `kind` | string | 是 | `"principal_policy_attachment"` |
-| `principal_type` | string | 是 | 主体类型（如 `"role"`） |
+| `principal_type` | string | 是 | 主体类型：`"user"` 或 `"role"` |
 | `principal_id` | string | 是 | 主体标识 |
-| `policy_id` | string | 是 | 策略标识 |
+| `policy_id` | string | 是 | 策略 durable ID 或 slug |
 
 ##### `user_role_attachment`
 
@@ -196,9 +202,11 @@
 |------|------|------|------|
 | `kind` | string | 是 | `"user_role_attachment"` |
 | `user_id` | string | 是 | 用户标识 |
-| `role_id` | string | 是 | 角色标识 |
+| `role_id` | string | 是 | 角色 durable ID 或 slug |
 
 ##### `resource_grant`
+
+> 已废弃，不再接受写入。
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -256,6 +264,85 @@
   ]
 }
 ```
+
+#### Admin Policy 创建与绑定示例
+
+Control Plane Admin API 要求调用者持有 admin policy。以下示例展示如何创建 admin policy 并绑定给用户。
+
+**创建 admin policy：**
+
+`policy_id` 使用 durable UUIDv7 标识符，`slug` 必须为 `admin.controlplane`。control-plane admin 鉴权通过 slug 解析到 durable policy ID；旧布局迁移产生的 `generated#permission#controlplane.admin` 仅作为兼容回退识别。
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "policy_profile",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002",
+      "slug": "admin.controlplane",
+      "external_key": "controlplane-admin-v1",
+      "name": "Control Plane Admin",
+      "description": "Full access to control plane admin APIs",
+      "policy_document": { "statements": [] }
+    }
+  ]
+}
+```
+
+> control-plane admin 鉴权不检查 `policy_document` 内容，授权完全取决于下面的 `principal_policy_attachment` 绑定，因此空的 `statements` 列表即可。`controlplane` 不是 entity schema，`admin` 也不是合法 op——entity statement 通过 `schema` 配合 `selector` 限定实体，op 仅限 `create` / `read` / `update` / `delete` / `*`（见 `aaa.md` §6）。
+
+**绑定 admin policy 给用户（直接绑定）：**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "user",
+      "principal_id": "<USER_ID>",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002"
+    }
+  ]
+}
+```
+
+**绑定 admin policy 给用户（通过角色）：**
+
+```json
+{
+  "action": "create-iam-authz-records",
+  "project_id": "11111111-1111-4111-8111-111111111111",
+  "dry_run": false,
+  "data": [
+    {
+      "kind": "role_profile",
+      "role_id": "0190b3c4-1a2b-7c3d-8e4f-000000000001",
+      "slug": "role.admin",
+      "name": "Admin",
+      "description": "Admin role"
+    },
+    {
+      "kind": "principal_policy_attachment",
+      "principal_type": "role",
+      "principal_id": "0190b3c4-1a2b-7c3d-8e4f-000000000001",
+      "policy_id": "0190b3c4-1a2b-7c3d-8e4f-000000000002"
+    },
+    {
+      "kind": "user_role_attachment",
+      "user_id": "<USER_ID>",
+      "role_id": "0190b3c4-1a2b-7c3d-8e4f-000000000001"
+    }
+  ]
+}
+```
+
+> 如果已通过 REST Admin API 存在 admin（即已有用户持 admin policy），也可以使用 REST 绑定：`PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`，其中 `admin.controlplane` 作为 slug 会被解析到 durable policy ID。
 
 ### 4.6 `list-project-auth-config`
 

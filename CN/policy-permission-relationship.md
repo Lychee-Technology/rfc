@@ -2,6 +2,8 @@
 
 本文定义 LTBase auth 与控制面中 `policy` 与 `permission` 之间的规范关系。它锁定 canonical model、标识 legacy 兼容面，并说明迁移语义。
 
+> 内置控制面资源（users、roles、policies、binding policies、org units、attachments、referrals）在各层的规范命名见 `API-specs-control-plane.cn.md` §3.4（内置资源）。
+
 **状态：** Accepted（关联 issue [#330](https://github.com/Lychee-Technology/ltbase.api/issues/330)、[#337](https://github.com/Lychee-Technology/ltbase.api/issues/337)）
 
 ---
