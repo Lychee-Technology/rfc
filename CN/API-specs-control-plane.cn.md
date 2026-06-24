@@ -141,11 +141,13 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `ensure-project`
 - `repair-project`
 - `update-schema`
-- `create-permission-records`
 - `create-iam-authz-records`
 - `list-project-auth-config`
 - `migrate-authz-policy-model`
-- catalog put/get actions
+- `migrate-authz-resource-identity`
+- `put-project-capability-catalog` / `get-project-capability-catalog`
+- `put-project-compliance-profile` / `get-project-compliance-profile`
+- `put-project-action-template-catalog` / `get-project-action-template-catalog`
 - `import-referrals`
 
 ### 3.3 REST ↔ Action 映射
@@ -635,7 +637,7 @@ Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/cont
 特别是：
 
 - `ensure-project`、repair、schema、catalog、migration 等仍保留在 `/control-plane`
-- `migrate-authz-policy-model` 是运维 action，不是 `/api/v1/...` REST endpoint
+- `migrate-authz-policy-model` 与 `migrate-authz-resource-identity` 是运维 action，不是 `/api/v1/...` REST endpoint
 - admin REST 合约是 resource-oriented，而 `/control-plane` 是 action-oriented
 
 ### 7.1 通用请求字段

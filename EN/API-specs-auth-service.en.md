@@ -551,7 +551,7 @@ Delete conflicts return `409 role_in_use`.
 Implementation status:
 
 - `GET /api/v1/auth/policies` and `GET /api/v1/auth/policies/{policy_id}` are landed in the current branch.
-- policy write and attachment routes remain approved-contract docs until implementation lands.
+- Policy write routes (POST / PATCH / DELETE), principal-policy attach/detach, and GET principal policies are landed in the current branch.
 
 #### `GET /api/v1/auth/policies`
 
@@ -591,7 +591,6 @@ Request body:
 
 ```json
 {
-  "policy_id": "policy.sales_read",
   "name": "Sales Read Policy",
   "description": "Read access for sales records",
   "policy_document": {
@@ -721,7 +720,7 @@ There is no first-class REST resource for `permission_profile` or logical `resou
 
 ### 6.4 Binding Policies
 
-Implementation status: approved contract, not yet landed as a `/api/v1` route in the current branch.
+Implementation status: landed in the current branch.
 
 #### `GET /api/v1/auth/binding-policies`
 
@@ -758,7 +757,6 @@ Request body:
 
 ```json
 {
-  "policy_id": "bind.company_email",
   "enabled": true,
   "priority": 10,
   "rules": [

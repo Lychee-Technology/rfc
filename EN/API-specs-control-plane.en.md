@@ -141,11 +141,13 @@ The following remain under `/control-plane` as operational actions rather than a
 - `ensure-project`
 - `repair-project`
 - `update-schema`
-- `create-permission-records`
 - `create-iam-authz-records`
 - `list-project-auth-config`
 - `migrate-authz-policy-model`
-- catalog put/get actions
+- `migrate-authz-resource-identity`
+- `put-project-capability-catalog` / `get-project-capability-catalog`
+- `put-project-compliance-profile` / `get-project-compliance-profile`
+- `put-project-action-template-catalog` / `get-project-action-template-catalog`
 - `import-referrals`
 
 ### 3.3 REST ↔ Action Mapping Summary
@@ -635,7 +637,7 @@ Use `/control-plane` for Lambda Console style operations, CLI workflows, and bac
 In particular:
 
 - `/control-plane` remains the home of `ensure-project`, repair, schema, catalog, and migration actions
-- `migrate-authz-policy-model` is an operational action, not a `/api/v1/...` REST endpoint
+- `migrate-authz-policy-model` and `migrate-authz-resource-identity` are operational actions, not `/api/v1/...` REST endpoints
 - the admin REST contract is resource-oriented, while `/control-plane` is action-oriented
 
 ### 7.1 Common Request Fields

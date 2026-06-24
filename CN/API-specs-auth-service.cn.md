@@ -551,7 +551,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 实现状态：
 
 - `GET /api/v1/auth/policies` 与 `GET /api/v1/auth/policies/{policy_id}` 已在当前分支落地。
-- policy 写接口与 attachment 路由仍为已批准合同文档，待实现落地。
+- Policy 写接口（POST / PATCH / DELETE）、principal-policy attach/detach、以及 GET principal policies 已在当前分支落地。
 
 #### `GET /api/v1/auth/policies`
 
@@ -591,7 +591,6 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ```json
 {
-  "policy_id": "policy.sales_read",
   "name": "Sales Read Policy",
   "description": "销售记录读取策略",
   "policy_document": {
@@ -721,7 +720,7 @@ OU 不是合法 principal。
 
 ### 6.4 Binding Policies
 
-实现状态：已批准合同，但当前分支尚未作为 `/api/v1` 路由落地。
+实现状态：已在当前分支落地。
 
 #### `GET /api/v1/auth/binding-policies`
 
@@ -758,7 +757,6 @@ OU 不是合法 principal。
 
 ```json
 {
-  "policy_id": "bind.company_email",
   "enabled": true,
   "priority": 10,
   "rules": [
