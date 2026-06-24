@@ -146,6 +146,13 @@ Optional field-level or validation diagnostics may be returned as `details`.
 
 ## 4. Common Data Structures
 
+`policy_id`, `role_id`, and binding `policy_id` are server-generated UUIDv7
+durable identifiers returned in responses; `slug` and `external_key` are the
+human-readable / caller-correlation keys. Per the semantic-key contract a caller
+may reference an entity by its `slug` in request path-params and bodies (it
+resolves to the durable id), but stored records and responses always carry the
+UUIDv7. `ou_id` and `user_id` are caller/identity-supplied, not server-generated.
+
 ### 4.1 ControlPlaneUser
 
 ```json
@@ -172,10 +179,12 @@ Notes:
 
 ```json
 {
-  "role_id": "role.manager",
+  "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
   "name": "Manager",
   "description": "People manager",
-  "parent_role_ids": ["role.employee"],
+  "slug": "role.manager",
+  "external_key": "role-manager-v1",
+  "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
   "created_at": 1760000000000,
   "updated_at": 1760000000000
 }
@@ -186,8 +195,8 @@ Notes:
 ```json
 {
   "principal_type": "role",
-  "principal_id": "role.sales",
-  "policy_id": "policy.sales_read"
+  "principal_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd06",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03"
 }
 ```
 
@@ -195,9 +204,11 @@ Notes:
 
 ```json
 {
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "name": "Sales Read Policy",
   "description": "Read access for sales records",
+  "slug": "policy.sales_read",
+  "external_key": "policy-sales-read-v1",
   "document": {
     "statements": [
       {
@@ -221,9 +232,11 @@ Notes:
 
 ```json
 {
-  "policy_id": "bind.company_email",
+  "policy_id": "0192e0a1-9e5f-7d2c-9f30-cc03dd04ee08",
   "enabled": true,
   "priority": 10,
+  "slug": "bind.company_email",
+  "external_key": "bind-company-email-v1",
   "rules": [
     {
       "l": "and",
@@ -256,7 +269,7 @@ Note: referral availability is derived from `used_at` and `expires_at`; the curr
 ```json
 {
   "ou_id": "ou_team_android",
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "enforced": false
 }
 ```
@@ -370,9 +383,11 @@ Response:
     },
     "roles": [
       {
-        "role_id": "role.employee",
+        "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07",
         "name": "Employee",
         "description": "Default employee role",
+        "slug": "role.employee",
+        "external_key": "role-employee-v1",
         "parent_role_ids": [],
         "created_at": 1760000000000,
         "updated_at": 1760000000000
@@ -423,7 +438,7 @@ Response:
   "request_id": "req_123",
   "data": {
     "user_id": "user_alice",
-    "role_id": "role.manager"
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05"
   }
 }
 ```
@@ -439,7 +454,7 @@ Response:
   "request_id": "req_123",
   "data": {
     "user_id": "user_alice",
-    "role_id": "role.manager"
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05"
   }
 }
 ```
@@ -464,10 +479,12 @@ Response:
   "request_id": "req_123",
   "items": [
     {
-      "role_id": "role.manager",
+      "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
       "name": "Manager",
       "description": "People manager",
-      "parent_role_ids": ["role.employee"],
+      "slug": "role.manager",
+      "external_key": "role-manager-v1",
+      "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
       "created_at": 1760000000000,
       "updated_at": 1760000000000
     }
@@ -483,7 +500,6 @@ Request body:
 
 ```json
 {
-  "role_id": "role.manager",
   "name": "Manager",
   "description": "People manager",
   "parent_role_ids": ["role.employee"]
@@ -496,10 +512,10 @@ Response:
 {
   "request_id": "req_123",
   "data": {
-    "role_id": "role.manager",
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
     "name": "Manager",
     "description": "People manager",
-    "parent_role_ids": ["role.employee"]
+    "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"]
   }
 }
 ```
@@ -515,10 +531,12 @@ Response:
   "request_id": "req_123",
   "data": {
     "role": {
-      "role_id": "role.manager",
+      "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
       "name": "Manager",
       "description": "People manager",
-      "parent_role_ids": ["role.employee"],
+      "slug": "role.manager",
+      "external_key": "role-manager-v1",
+      "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
       "created_at": 1760000000000,
       "updated_at": 1760000000000
     }
@@ -551,7 +569,7 @@ Delete conflicts return `409 role_in_use`.
 Implementation status:
 
 - `GET /api/v1/auth/policies` and `GET /api/v1/auth/policies/{policy_id}` are landed in the current branch.
-- policy write and attachment routes remain approved-contract docs until implementation lands.
+- Policy write routes (POST / PATCH / DELETE), principal-policy attach/detach, and GET principal policies are landed in the current branch.
 
 #### `GET /api/v1/auth/policies`
 
@@ -564,9 +582,11 @@ Response:
   "request_id": "req_123",
   "items": [
     {
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "name": "Sales Read Policy",
       "description": "Read access for sales records",
+      "slug": "policy.sales_read",
+      "external_key": "policy-sales-read-v1",
       "document": {
         "statements": [
           {
@@ -591,7 +611,6 @@ Request body:
 
 ```json
 {
-  "policy_id": "policy.sales_read",
   "name": "Sales Read Policy",
   "description": "Read access for sales records",
   "policy_document": {
@@ -633,7 +652,7 @@ Response:
 {
   "request_id": "req_123",
   "data": {
-    "policy_id": "policy.sales_read",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
     "name": "Sales Read Policy"
   }
 }
@@ -657,9 +676,11 @@ Response:
   "request_id": "req_123",
   "data": {
     "policy": {
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "name": "Sales Read Policy",
       "description": "Read access for sales records",
+      "slug": "policy.sales_read",
+      "external_key": "policy-sales-read-v1",
       "document": {
         "statements": [
           {
@@ -704,8 +725,8 @@ Response:
   "request_id": "req_123",
   "data": {
     "principal_type": "role",
-    "principal_id": "role.sales",
-    "policy_id": "policy.sales_read"
+    "principal_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd06",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03"
   }
 }
 ```
@@ -721,7 +742,7 @@ There is no first-class REST resource for `permission_profile` or logical `resou
 
 ### 6.4 Binding Policies
 
-Implementation status: approved contract, not yet landed as a `/api/v1` route in the current branch.
+Implementation status: landed in the current branch.
 
 #### `GET /api/v1/auth/binding-policies`
 
@@ -734,9 +755,11 @@ Response:
   "request_id": "req_123",
   "items": [
     {
-      "policy_id": "bind.company_email",
+      "policy_id": "0192e0a1-9e5f-7d2c-9f30-cc03dd04ee08",
       "enabled": true,
       "priority": 10,
+      "slug": "bind.company_email",
+      "external_key": "bind-company-email-v1",
       "rules": [
         {
           "l": "and",
@@ -758,7 +781,6 @@ Request body:
 
 ```json
 {
-  "policy_id": "bind.company_email",
   "enabled": true,
   "priority": 10,
   "rules": [

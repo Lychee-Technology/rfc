@@ -141,11 +141,13 @@ The following remain under `/control-plane` as operational actions rather than a
 - `ensure-project`
 - `repair-project`
 - `update-schema`
-- `create-permission-records`
 - `create-iam-authz-records`
 - `list-project-auth-config`
 - `migrate-authz-policy-model`
-- catalog put/get actions
+- `migrate-authz-resource-identity`
+- `put-project-capability-catalog` / `get-project-capability-catalog`
+- `put-project-compliance-profile` / `get-project-compliance-profile`
+- `put-project-action-template-catalog` / `get-project-action-template-catalog`
 - `import-referrals`
 
 ### 3.3 REST ↔ Action Mapping Summary
@@ -187,6 +189,13 @@ Notes:
 
 ## 4. Common Data Structures
 
+In stored records and responses, `policy_id` and `role_id` are the server-generated
+UUIDv7 durable identifiers (defined by the auth service); the readable `slug` is a
+convenience key that callers may use to reference an entity in requests. `ou_id`
+and `user_id` are caller/identity-supplied. The caller-supplied `policy_id`/`role_id`
+in `create-iam-authz-records` action payloads (§7.2) are the exception — that action
+requires the caller to provide the durable id explicitly.
+
 ### 4.1 ControlPlaneUser
 
 ```json
@@ -223,7 +232,7 @@ Notes:
 ```json
 {
   "ou_id": "ou_team_android",
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "enforced": false
 }
 ```
@@ -461,7 +470,7 @@ Response:
   "items": [
     {
       "ou_id": "ou_team_android",
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "enforced": false
     }
   ]
@@ -487,7 +496,7 @@ Response:
   "request_id": "req_123",
   "data": {
     "ou_id": "ou_team_android",
-    "policy_id": "policy.sales_read",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
     "enforced": false
   }
 }
@@ -635,7 +644,7 @@ Use `/control-plane` for Lambda Console style operations, CLI workflows, and bac
 In particular:
 
 - `/control-plane` remains the home of `ensure-project`, repair, schema, catalog, and migration actions
-- `migrate-authz-policy-model` is an operational action, not a `/api/v1/...` REST endpoint
+- `migrate-authz-policy-model` and `migrate-authz-resource-identity` are operational actions, not `/api/v1/...` REST endpoints
 - the admin REST contract is resource-oriented, while `/control-plane` is action-oriented
 
 ### 7.1 Common Request Fields
