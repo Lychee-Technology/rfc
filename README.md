@@ -21,6 +21,16 @@ Technical ideas which request for comments
 * `CN/control-plane-cli.legacy.md` - legacy Control Plane Action API / Lambda Console manual (migrated from `ltbase.api/docs`; superseded by `CN/control-plane-cli.md`)
 * `CN/auth-access-key.cn.md` - legacy Access Key / Ed25519 signature auth spec (migrated from `ltbase.api/docs`; superseded by the JWT scheme in `CN/Auth.cn.md`)
 
+## Runbooks
+
+### English
+
+* `EN/notes-debugging-runbook.en.md` - Notes debugging runbook (migrated from `ltbase.api/docs`)
+
+### Chinese
+
+* `CN/notes-debugging-runbook.cn.md` - Notes 调试运行手册 (migrated from `ltbase.api/docs`)
+
 ## AAA RFCs
 
 ### English
