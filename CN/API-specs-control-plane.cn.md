@@ -148,6 +148,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 - `put-project-capability-catalog` / `get-project-capability-catalog`
 - `put-project-compliance-profile` / `get-project-compliance-profile`
 - `put-project-action-template-catalog` / `get-project-action-template-catalog`
+- `put-project-assistant-role-catalog` / `get-project-assistant-role-catalog`
 - `import-referrals`
 
 ### 3.3 REST ↔ Action 映射
