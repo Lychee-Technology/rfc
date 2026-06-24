@@ -148,6 +148,7 @@ The following remain under `/control-plane` as operational actions rather than a
 - `put-project-capability-catalog` / `get-project-capability-catalog`
 - `put-project-compliance-profile` / `get-project-compliance-profile`
 - `put-project-action-template-catalog` / `get-project-action-template-catalog`
+- `put-project-assistant-role-catalog` / `get-project-assistant-role-catalog`
 - `import-referrals`
 
 ### 3.3 REST ↔ Action Mapping Summary

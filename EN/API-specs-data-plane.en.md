@@ -381,7 +381,7 @@ Field notes:
 
 - `type`: required; must start with `text/`, `audio/`, or `image/`
 - `data`: required
-- `role`: optional
+- `role`: optional assistant role name (string) that influences summary style. Built-in values `general`, `real_estate`, `insurance`, `financial` serve as fallback; custom roles are configurable per project via the control-plane catalog API (`/api/v1/catalogs/assistant-roles`). Unknown roles fall back to the default `general` role.
 - `models`: optional structured extraction templates
 - `model`: backward-compatible single-object alias for older clients; the server automatically converts it to `models`
 - `owner_id`: even if provided, it is overwritten by the JWT subject
