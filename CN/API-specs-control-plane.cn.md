@@ -189,6 +189,11 @@ control plane 管理一组固定的**内置资源**。它们通过各自的 REST
 
 ## 4. 通用数据结构
 
+在存储记录与响应中，`policy_id` 和 `role_id` 是服务端生成的 UUIDv7 持久标识符（由 auth
+service 定义）；可读的 `slug` 是便捷引用键，调用方可在请求中用它引用实体。`ou_id` 与
+`user_id` 由调用方/身份提供。唯一例外是 `create-iam-authz-records` 动作载荷（§7.2）中由
+调用方提供的 `policy_id`/`role_id`——该动作要求调用方显式提供持久 id。
+
 ### 4.1 ControlPlaneUser
 
 ```json
@@ -225,7 +230,7 @@ control plane 管理一组固定的**内置资源**。它们通过各自的 REST
 ```json
 {
   "ou_id": "ou_team_android",
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "enforced": false
 }
 ```
@@ -463,7 +468,7 @@ V1 规则：
   "items": [
     {
       "ou_id": "ou_team_android",
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "enforced": false
     }
   ]
@@ -489,7 +494,7 @@ V1 规则：
   "request_id": "req_123",
   "data": {
     "ou_id": "ou_team_android",
-    "policy_id": "policy.sales_read",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
     "enforced": false
   }
 }

@@ -146,6 +146,12 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ## 4. 通用数据结构
 
+`policy_id`、`role_id` 以及绑定策略的 `policy_id` 是服务端生成的 UUIDv7 持久标识符，
+并在响应中返回；`slug` 与 `external_key` 是人类可读 / 调用方关联键。根据语义键约定
+（semantic-key contract），调用方可在请求路径参数和请求体中通过 `slug` 引用实体（会被
+解析为持久 id），但存储记录与响应始终携带 UUIDv7。`ou_id` 和 `user_id` 由调用方/身份
+提供，并非服务端生成。
+
 ### 4.1 ControlPlaneUser
 
 ```json
@@ -172,10 +178,12 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ```json
 {
-  "role_id": "role.manager",
+  "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
   "name": "Manager",
   "description": "People manager",
-  "parent_role_ids": ["role.employee"],
+  "slug": "role.manager",
+  "external_key": "role-manager-v1",
+  "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
   "created_at": 1760000000000,
   "updated_at": 1760000000000
 }
@@ -186,8 +194,8 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 ```json
 {
   "principal_type": "role",
-  "principal_id": "role.sales",
-  "policy_id": "policy.sales_read"
+  "principal_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd06",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03"
 }
 ```
 
@@ -195,9 +203,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ```json
 {
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "name": "Sales Read Policy",
   "description": "销售记录读取策略",
+  "slug": "policy.sales_read",
+  "external_key": "policy-sales-read-v1",
   "document": {
     "statements": [
       {
@@ -221,9 +231,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ```json
 {
-  "policy_id": "bind.company_email",
+  "policy_id": "0192e0a1-9e5f-7d2c-9f30-cc03dd04ee08",
   "enabled": true,
   "priority": 10,
+  "slug": "bind.company_email",
+  "external_key": "bind-company-email-v1",
   "rules": [
     {
       "l": "and",
@@ -256,7 +268,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 ```json
 {
   "ou_id": "ou_team_android",
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "enforced": false
 }
 ```
@@ -370,9 +382,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
     },
     "roles": [
       {
-        "role_id": "role.employee",
+        "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07",
         "name": "Employee",
         "description": "Default employee role",
+        "slug": "role.employee",
+        "external_key": "role-employee-v1",
         "parent_role_ids": [],
         "created_at": 1760000000000,
         "updated_at": 1760000000000
@@ -423,7 +437,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "data": {
     "user_id": "user_alice",
-    "role_id": "role.manager"
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05"
   }
 }
 ```
@@ -439,7 +453,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "data": {
     "user_id": "user_alice",
-    "role_id": "role.manager"
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05"
   }
 }
 ```
@@ -464,10 +478,12 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "items": [
     {
-      "role_id": "role.manager",
+      "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
       "name": "Manager",
       "description": "People manager",
-      "parent_role_ids": ["role.employee"],
+      "slug": "role.manager",
+      "external_key": "role-manager-v1",
+      "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
       "created_at": 1760000000000,
       "updated_at": 1760000000000
     }
@@ -483,7 +499,6 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 ```json
 {
-  "role_id": "role.manager",
   "name": "Manager",
   "description": "People manager",
   "parent_role_ids": ["role.employee"]
@@ -496,10 +511,10 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 {
   "request_id": "req_123",
   "data": {
-    "role_id": "role.manager",
+    "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
     "name": "Manager",
     "description": "People manager",
-    "parent_role_ids": ["role.employee"]
+    "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"]
   }
 }
 ```
@@ -515,10 +530,12 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "data": {
     "role": {
-      "role_id": "role.manager",
+      "role_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd05",
       "name": "Manager",
       "description": "People manager",
-      "parent_role_ids": ["role.employee"],
+      "slug": "role.manager",
+      "external_key": "role-manager-v1",
+      "parent_role_ids": ["0192e0a1-8d4e-7c2b-9f20-bb02cc03dd07"],
       "created_at": 1760000000000,
       "updated_at": 1760000000000
     }
@@ -564,9 +581,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "items": [
     {
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "name": "Sales Read Policy",
       "description": "销售记录读取策略",
+      "slug": "policy.sales_read",
+      "external_key": "policy-sales-read-v1",
       "document": {
         "statements": [
           {
@@ -632,7 +651,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 {
   "request_id": "req_123",
   "data": {
-    "policy_id": "policy.sales_read",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
     "name": "Sales Read Policy"
   }
 }
@@ -656,9 +675,11 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
   "request_id": "req_123",
   "data": {
     "policy": {
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "name": "Sales Read Policy",
       "description": "销售记录读取策略",
+      "slug": "policy.sales_read",
+      "external_key": "policy-sales-read-v1",
       "document": {
         "statements": [
           {
@@ -703,8 +724,8 @@ OU 不是合法 principal。
   "request_id": "req_123",
   "data": {
     "principal_type": "role",
-    "principal_id": "role.sales",
-    "policy_id": "policy.sales_read"
+    "principal_id": "0192e0a1-8d4e-7c2b-9f20-bb02cc03dd06",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03"
   }
 }
 ```
@@ -733,9 +754,11 @@ OU 不是合法 principal。
   "request_id": "req_123",
   "items": [
     {
-      "policy_id": "bind.company_email",
+      "policy_id": "0192e0a1-9e5f-7d2c-9f30-cc03dd04ee08",
       "enabled": true,
       "priority": 10,
+      "slug": "bind.company_email",
+      "external_key": "bind-company-email-v1",
       "rules": [
         {
           "l": "and",

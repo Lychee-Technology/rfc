@@ -189,6 +189,13 @@ Notes:
 
 ## 4. Common Data Structures
 
+In stored records and responses, `policy_id` and `role_id` are the server-generated
+UUIDv7 durable identifiers (defined by the auth service); the readable `slug` is a
+convenience key that callers may use to reference an entity in requests. `ou_id`
+and `user_id` are caller/identity-supplied. The caller-supplied `policy_id`/`role_id`
+in `create-iam-authz-records` action payloads (§7.2) are the exception — that action
+requires the caller to provide the durable id explicitly.
+
 ### 4.1 ControlPlaneUser
 
 ```json
@@ -225,7 +232,7 @@ Notes:
 ```json
 {
   "ou_id": "ou_team_android",
-  "policy_id": "policy.sales_read",
+  "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
   "enforced": false
 }
 ```
@@ -463,7 +470,7 @@ Response:
   "items": [
     {
       "ou_id": "ou_team_android",
-      "policy_id": "policy.sales_read",
+      "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
       "enforced": false
     }
   ]
@@ -489,7 +496,7 @@ Response:
   "request_id": "req_123",
   "data": {
     "ou_id": "ou_team_android",
-    "policy_id": "policy.sales_read",
+    "policy_id": "0192e0a1-7c3d-7b2a-9f10-aa01bb02cc03",
     "enforced": false
   }
 }
