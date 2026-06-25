@@ -385,7 +385,7 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 
 - `type`：必填，必须以 `text/`、`audio/`、`image/` 开头
 - `data`：必填
-- `role`：可选，assistant 角色名（字符串），影响摘要风格。内置值 `general`、`real_estate`、`insurance`、`financial` 作为 fallback；可通过 control-plane catalog API（`/api/control-plane/v1/catalogs/assistant-roles`）按 project 配置自定义角色。未知角色 fallback 到默认 `general`。
+- `role`：可选，assistant 角色名（字符串），影响摘要风格。内置值 `general`、`real_estate`、`insurance`、`financial` 作为 fallback；可通过 control-plane catalog API（`/api/v1/catalogs/assistant-roles`）按 project 配置自定义角色。未知角色 fallback 到默认 `general`。
 - `models`：可选，结构化抽取模板。`models[].type` 对应 Forma JSON Schema，驱动 Gemini 结构化输出（`ResponseSchema`），行为不变。
 - `model`：兼容旧客户端的单对象别名，服务端会自动转成 `models`
 - `owner_id`：即使传入，也会被 JWT 主体覆盖
