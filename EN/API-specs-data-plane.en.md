@@ -385,7 +385,7 @@ Field notes:
 
 - `type`: required; must start with `text/`, `audio/`, or `image/`
 - `data`: required
-- `role`: optional assistant role name (string) that influences summary style. Built-in values `general`, `real_estate`, `insurance`, `financial` serve as fallback; custom roles are configurable per project via the control-plane catalog API (`/api/v1/catalogs/assistant-roles`). Unknown roles fall back to the default `general` role.
+- `role`: optional assistant role name (string) that influences summary style. Built-in values `general`, `real_estate`, `insurance`, `financial` serve as fallback; custom roles are configurable per project via the control-plane catalog API (`/api/control-plane/v1/catalogs/assistant-roles`). Unknown roles fall back to the default `general` role.
 - `models`: optional structured extraction templates. `models[].type` corresponds to a Forma JSON Schema and drives Gemini structured output via `ResponseSchema` (unchanged from previous behavior).
 - `model`: backward-compatible single-object alias for older clients; the server automatically converts it to `models`
 - `owner_id`: even if provided, it is overwritten by the JWT subject
@@ -472,7 +472,7 @@ Additional notes:
 
 #### Create-Note RAG Context
 
-When `context.rag` is `true` and the note MIME type is `text/*`, the server asynchronously retrieves relevant reference material and injects it into the Gemini prompt to improve extraction quality:
+When `context.rag` is `true` and the note MIME type is `text/*`, the server retrieves relevant reference material and injects it into the Gemini prompt to improve extraction quality:
 
 | Source | Scope | Authorization |
 |---|---|---|
