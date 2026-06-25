@@ -373,7 +373,11 @@ Request body:
         "raw_type": "${note.type}"
       }
     }
-  ]
+  ],
+  "context": {
+    "rag": true,
+    "forma_schemas": ["lead"]
+  }
 }
 ```
 
@@ -382,9 +386,12 @@ Field notes:
 - `type`: required; must start with `text/`, `audio/`, or `image/`
 - `data`: required
 - `role`: optional assistant role name (string) that influences summary style. Built-in values `general`, `real_estate`, `insurance`, `financial` serve as fallback; custom roles are configurable per project via the control-plane catalog API (`/api/v1/catalogs/assistant-roles`). Unknown roles fall back to the default `general` role.
-- `models`: optional structured extraction templates
+- `models`: optional structured extraction templates. `models[].type` corresponds to a Forma JSON Schema and drives Gemini structured output via `ResponseSchema` (unchanged from previous behavior).
 - `model`: backward-compatible single-object alias for older clients; the server automatically converts it to `models`
 - `owner_id`: even if provided, it is overwritten by the JWT subject
+- `context`: optional non-content extraction parameters
+  - `context.rag` (bool): when `true`, injects authorized RAG context into the Gemini prompt. Only applies to `text/*` MIME types.
+  - `context.forma_schemas` ([]string): optional allowlist of Forma schema names for RAG retrieval. When empty, all authorized Forma schemas are considered.
 
 Request header:
 
@@ -462,6 +469,21 @@ Additional notes:
 **Models built entirely from placeholders:** Because placeholder fields are stripped from the AI schema (see above), a model whose fields are *all* placeholders leaves the AI nothing to extract. On the AI-extraction path this is treated as a failed extraction for that model type, and the model is **not persisted** (surfaced through the model sync status). The very-short-text path skips AI extraction and keeps request models as-is, so placeholder-only models *are* persisted there. To reliably persist a model on the AI path, include at least one non-placeholder field that the AI can extract.
 
 **Notes:** Unrecognized placeholders remain as-is in the original string. New code should use the `${note.*}` style. Placeholders apply only to model data persistence during note creation; they do not affect summary updates or AI model configuration.
+
+#### Create-Note RAG Context
+
+When `context.rag` is `true` and the note MIME type is `text/*`, the server asynchronously retrieves relevant reference material and injects it into the Gemini prompt to improve extraction quality:
+
+| Source | Scope | Authorization |
+|---|---|---|
+| Own notes | LTSearch query with `source_type=nota`, filtered by `project_id` | Each note hit is verified via repository lookup (`GetNote` with the JWT `owner_id`). Notes not owned by the caller are silently excluded. |
+| Forma entities | LTSearch query with `source_type=forma_entity`, filtered by `project_id` and optional `forma_schemas` allowlist | Each Forma hit is verified through the existing Forma authorization path (`resolveFormaScope` for `formaOpRead` → `authorizeFormaRowIDWithScope`). Unauthorized objects are silently excluded. |
+
+Design reference: [#363](https://github.com/Lychee-Technology/ltbase.api/issues/363). Implementation epic: [#388](https://github.com/Lychee-Technology/ltbase.api/issues/388).
+
+The RAG context pack enforces per-source-type token and byte budgets (configurable via environment variables `LTBASE_CREATE_NOTE_RAG_NOTA_MAX_BYTES`, `LTBASE_CREATE_NOTE_RAG_FORMA_MAX_BYTES`, `LTBASE_CREATE_NOTE_RAG_NOTA_MAX_TOKENS`, `LTBASE_CREATE_NOTE_RAG_FORMA_MAX_TOKENS`). When budgets are exceeded, the source group is truncated and metadata records the truncation.
+
+The Gemini call always uses `ResponseMIMEType: application/json` with a `ResponseSchema` built from `models[].type` → Forma JSON Schema. The output contract (summary + models + extraction status) is unchanged regardless of whether RAG is in use.
 
 ### 5.3 `GET /api/ai/v1/notes`
 

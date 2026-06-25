@@ -373,7 +373,11 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
         "raw_type": "${note.type}"
       }
     }
-  ]
+  ],
+  "context": {
+    "rag": true,
+    "forma_schemas": ["lead"]
+  }
 }
 ```
 
@@ -382,9 +386,12 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 - `type`：必填，必须以 `text/`、`audio/`、`image/` 开头
 - `data`：必填
 - `role`：可选，assistant 角色名（字符串），影响摘要风格。内置值 `general`、`real_estate`、`insurance`、`financial` 作为 fallback；可通过 control-plane catalog API（`/api/v1/catalogs/assistant-roles`）按 project 配置自定义角色。未知角色 fallback 到默认 `general`。
-- `models`：可选，结构化抽取模板
+- `models`：可选，结构化抽取模板。`models[].type` 对应 Forma JSON Schema，驱动 Gemini 结构化输出（`ResponseSchema`），行为不变。
 - `model`：兼容旧客户端的单对象别名，服务端会自动转成 `models`
 - `owner_id`：即使传入，也会被 JWT 主体覆盖
+- `context`：可选，非内容抽取参数
+  - `context.rag`（bool）：`true` 时向 Gemini prompt 注入已授权的 RAG 上下文。仅对 `text/*` 类型生效。
+  - `context.forma_schemas`（[]string）：可选白名单，限制 Forma RAG 检索的 schema。不传时对所有已授权 schema 生效。
 
 请求 Header：
 
@@ -462,6 +469,21 @@ Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-contro
 **全部由 placeholder 构成的 model：** 由于 placeholder 字段会从 AI schema 中被移除（见上），若某个 model 的字段全部是 placeholder，则 AI 无可抽取的内容。在 AI 抽取路径下，该 model type 会被视为抽取失败，**不会被持久化**（通过 model sync status 反映）。very-short-text 路径会跳过 AI 抽取、直接保留请求中的 models，因此在该路径下纯 placeholder 的 model 仍会被持久化。若需在 AI 路径下稳定持久化某个 model，请至少包含一个可供 AI 抽取的非 placeholder 字段。
 
 **注意事项：** 不支持的 placeholder 不会被替换，原字符串保留。建议新代码统一使用 `${note.*}` 写法。Placeholder 仅用于 create note 流程中的 model data 持久化，不用于更新 summary 或直接配置 AI 参数。
+
+#### Create-Note RAG 上下文
+
+当 `context.rag` 为 `true` 且 note MIME 类型为 `text/*` 时，服务端会检索相关参考材料并注入 Gemini prompt，以提升抽取质量：
+
+| 来源 | 范围 | 授权 |
+|---|---|---|
+| 自有 notes | LTSearch 查询 `source_type=nota`，按 `project_id` 过滤 | 每个 note 命中通过仓库查询验证（`GetNote` + JWT `owner_id`）。非调用者自有的 notes 静默排除。 |
+| Forma 实体 | LTSearch 查询 `source_type=forma_entity`，按 `project_id` 过滤，可选 `forma_schemas` 白名单 | 每个 Forma 命中通过现有 Forma 授权路径验证（`resolveFormaScope` + `authorizeFormaRowIDWithScope`）。未授权对象静默排除。 |
+
+设计参考：[#363](https://github.com/Lychee-Technology/ltbase.api/issues/363)。实现 epic：[#388](https://github.com/Lychee-Technology/ltbase.api/issues/388)。
+
+RAG 上下文包对每种来源类型强制执行 token 和 byte 预算（可通过环境变量 `LTBASE_CREATE_NOTE_RAG_NOTA_MAX_BYTES`、`LTBASE_CREATE_NOTE_RAG_FORMA_MAX_BYTES`、`LTBASE_CREATE_NOTE_RAG_NOTA_MAX_TOKENS`、`LTBASE_CREATE_NOTE_RAG_FORMA_MAX_TOKENS` 配置）。超出预算时来源组被截断，元数据中记录截断状态。
+
+Gemini 调用始终使用 `ResponseMIMEType: application/json` 和基于 `models[].type` → Forma JSON Schema 构建的 `ResponseSchema`。无论是否使用 RAG，输出契约（summary + models + extraction status）保持不变。
 
 ### 5.3 `GET /api/ai/v1/notes`
 
