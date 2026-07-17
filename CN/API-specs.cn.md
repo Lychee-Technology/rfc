@@ -8,11 +8,11 @@
 ## 文档列表
 
 - `API-specs-data-plane.cn.md`：当前 data plane HTTP API，包括 Notes、Forma、CRUD Agent、semantic、ontology、governance、compliance、discovery、intent-to-action planning。
-- `API-specs-auth-service.cn.md`：`/api/v1/auth/...` 下的 control-plane admin REST API，包括 auth config、users、roles、policies、principal policy attachments、binding policies、referrals。
+- `API-specs-control-plane-service-auth-routes.cn.md`：`/api/v1/auth/...` 下的 control-plane admin REST API，包括 auth config、users、roles、policies、principal policy attachments、binding policies、referrals。
 - `API-specs-control-plane.cn.md`：`/api/v1/org/...` 下的 control-plane admin REST API，以及与其分离的旧版 `/control-plane` 运维 action API。
 
 ## 推荐阅读顺序
 
 1. [Data Plane APIs](API-specs-data-plane.cn.md)
-2. [Auth Service APIs](API-specs-auth-service.cn.md)
+2. [Auth Service APIs](API-specs-control-plane-service-auth-routes.cn.md)
 3. [Control Plane APIs](API-specs-control-plane.cn.md)
