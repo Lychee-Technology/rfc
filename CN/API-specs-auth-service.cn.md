@@ -66,6 +66,8 @@ Control-plane admin REST API 使用 Bearer JWT 认证，鉴权基于 **admin pol
 
 所有 `/api/v1/auth/...` 路由（任意 method）均要求 admin。未知路由在鉴权之后才返回 404。
 
+**唯一例外：CORS preflight。** 任何 `OPTIONS` 请求在鉴权与路由匹配**之前**直接返回 `204 No Content`（仅带 CORS 头，无响应体，因此也没有 `request_id` envelope）。preflight 不是正常的 API 响应，不受本节鉴权规则与 §2.3 envelope 约定的约束。
+
 ### 2.2 Project 作用域
 
 LTBase 当前在 control plane 上只支持单 project 私有部署。
@@ -167,12 +169,18 @@ referral 路由另有顶层别名 `/api/v1/referrals...`（同一 handler）。
 
 ## 4. 通用数据结构
 
-`policy_id`、`role_id` 以及绑定策略的 `policy_id` 是服务端生成的 UUIDv7 持久标识符，
-并在响应中返回；`slug` 与 `external_key` 是人类可读 / 调用方关联键。根据语义键约定
-（semantic-key contract），调用方可在请求路径参数中通过 `slug` 引用实体（大小写不敏感，
-解析为持久 id），但存储记录与响应始终携带 UUIDv7。slug 解析适用于 role、policy 与
-binding policy 的路径参数；`user_id` 只按精确值匹配。`ou_id` 和 `user_id` 由调用方/身份
-提供，并非服务端生成。
+`policy_id`、`role_id` 以及绑定策略的 `policy_id` 是服务端生成的 UUIDv7 持久标识符；
+`slug` 与 `external_key` 是人类可读 / 调用方关联键。根据语义键约定（semantic-key
+contract），调用方可在请求路径参数中通过 `slug` 引用实体（大小写不敏感，解析为持久
+id）。slug 解析适用于 role、policy 与 binding policy 的路径参数；`user_id` 只按精确值
+匹配。`ou_id` 和 `user_id` 由调用方/身份提供，并非服务端生成。
+
+标识符规范化的边界：**存储记录与完整资源对象响应**（`data.user` / `data.role` /
+`data.policy` / `data.binding_policy` 及集合条目）始终携带 UUIDv7。但 attach / detach /
+delete 返回的 `status` 小对象会**原样回显路径参数中提供的标识**——调用方传 slug 时，
+响应中的 `role_id` / `policy_id` / `principal_id` 就是该 slug，不会规范化为 UUID（涉及
+user-role attach/detach、principal-policy attach/detach、role/policy/binding-policy
+delete）。需要持久 id 时请以资源对象响应或 GET 接口为准。
 
 ### 4.1 ControlPlaneUser（公开 DTO）
 
@@ -350,7 +358,7 @@ legacy 别名：`GET /api/v1/auth-config`（同一 handler）。仅支持 GET，
 - `ou_policy_attachments[]` 条目仅含 `{ "ou_id", "policy_id" }`（不含 `enforced` 或时间戳）。
 - `referrals[]` 条目为快照专用形状 `{ "code", "policy_id?", "used_at", "expires_at", "created_at", "updated_at" }`（不含 `project_id`、`disabled`、`status`）。
 - `warnings[]` 条目为 `{ "code", "message" }`。
-- `authorization_model` 是固定值对象，声明规范授权模型（见 `rfc/EN/policy-permission-relationship.md`）。
+- `authorization_model` 是固定值对象，声明规范授权模型（见 `rfc/CN/policy-permission-relationship.md`）。
 
 其他说明：
 
@@ -1021,7 +1029,7 @@ OU 不是合法 principal。
 
 用途：批量导入 referral codes。任意非空的 `import` query 值均触发批量模式。
 
-请求体为 JSON 数组，条目字段为 `referral_code`（必填）、`policy_id`（可选）、`expires_at_ms`（可选，int 或数字字符串）、`project_id`（可选，如提供必须等于部署 project）：
+请求体为 JSON 数组，条目字段为 `referral_code`（必填）、`policy_id`（可选）、`expires_at_ms`（可选，int 或数字字符串）、`project_id`（可选，**会被忽略**——REST 路径始终强制使用部署 project，条目里传任何值都不会被校验或采用；这与 `/control-plane` action 批量模式不同，后者要求条目 `project_id` 与顶层一致）：
 
 ```json
 [

@@ -69,6 +69,8 @@ Control-plane admin REST API 使用 Bearer JWT 认证，鉴权基于 **admin pol
 
 Org 的所有写操作（POST/PATCH/PUT/DELETE）仍要求 admin。未知路由在鉴权 **之后** 才返回 404，因此无法用未授权请求探测路由表。
 
+**唯一例外：CORS preflight。** 任何 `OPTIONS` 请求在鉴权与路由匹配**之前**直接返回 `204 No Content`（仅带 CORS 头，无响应体，因此也没有 `request_id` envelope）。preflight 不是正常的 API 响应，不受本节鉴权规则与 §2.3 envelope 约定的约束。
+
 ### 2.2 Project 作用域
 
 LTBase 当前在 control plane 上只支持单 project 私有部署。
@@ -256,7 +258,7 @@ org 与 auth REST 路由返回的用户对象形状（`apiPublicAuthUser`）：
 }
 ```
 
-说明：公开 DTO **不含** `referral_code`；只有 `GET /api/v1/auth/config` 快照中的用户对象包含 `referral_code`（见 `API-specs-auth-service.cn.md` §4.1）。
+说明：公开 DTO **不含** `referral_code`；只有 `GET /api/v1/auth/config` 快照中的用户对象包含 `referral_code`（快照专用形状见 `API-specs-auth-service.cn.md` §5）。
 
 ### 4.2 OrgUnit
 
@@ -1126,7 +1128,7 @@ admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检
 行为说明：
 
 - 已存在的 referral code 会被**跳过**（条件写入），计入 `skipped_existing`。
-- `policy_id` 在写入时即时校验：引用不存在的 policy 返回 `policy_not_found` 错误。
+- `policy_id` 在写入时即时校验，但错误码在两个入口不同：REST endpoint（`POST /api/v1/auth/referrals` 及 `?import=1`）把不存在的 policy 翻译为 `400 policy_not_found`；本 action **不做**该翻译，policy 不存在与其他导入失败一并返回 `500 import_referrals_failed`（错误消息中包含底层原因）。
 - 当 `policy_id` 为 slug 时，写入前会解析为 durable `policy_id`。
 - 省略 `policy_id` 保持旧绑定行为（身份绑定时不会自动附加 policy）。
 - 在 REST referral 资源上，`PATCH /api/v1/auth/referrals/{code}` 仅接受 `expires_at_ms`；`policy_id` 不是可接受的 PATCH 字段，会被静默忽略（而非报错拒绝）。绑定在创建后可视为不可变。

@@ -66,6 +66,8 @@ Authenticated requests without the admin policy return:
 
 All `/api/v1/auth/...` routes (any method) require admin. Unknown routes 404 only after authorization.
 
+**The one exception: CORS preflight.** Any `OPTIONS` request returns `204 No Content` **before** authorization and route matching (CORS headers only, no body — and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
+
 ### 2.2 Project Scope
 
 LTBase currently supports single-project private deployment for the control plane.
@@ -168,13 +170,22 @@ The referral routes also exist under the top-level alias `/api/v1/referrals...` 
 ## 4. Common Data Structures
 
 `policy_id`, `role_id`, and binding `policy_id` are server-generated UUIDv7
-durable identifiers returned in responses; `slug` and `external_key` are the
-human-readable / caller-correlation keys. Per the semantic-key contract a caller
-may reference an entity by its `slug` in request path-params (case-insensitive;
-it resolves to the durable id), but stored records and responses always carry
-the UUIDv7. Slug resolution applies to role, policy, and binding-policy path
-params; `user_id` matches only by exact value. `ou_id` and `user_id` are
+durable identifiers; `slug` and `external_key` are the human-readable /
+caller-correlation keys. Per the semantic-key contract a caller may reference
+an entity by its `slug` in request path-params (case-insensitive; it resolves
+to the durable id). Slug resolution applies to role, policy, and binding-policy
+path params; `user_id` matches only by exact value. `ou_id` and `user_id` are
 caller/identity-supplied, not server-generated.
+
+Identifier canonicalization boundary: **stored records and full resource-object
+responses** (`data.user` / `data.role` / `data.policy` / `data.binding_policy`
+and collection items) always carry the UUIDv7. However, the small `status`
+objects returned by attach / detach / delete **echo the identifier exactly as
+supplied in the path** — when the caller passes a slug, the `role_id` /
+`policy_id` / `principal_id` in the response is that slug, not the canonical
+UUID (this applies to user-role attach/detach, principal-policy attach/detach,
+and role/policy/binding-policy delete). When the durable id is needed, rely on
+resource-object responses or the GET endpoints.
 
 ### 4.1 ControlPlaneUser (public DTO)
 
@@ -1023,7 +1034,7 @@ Error codes: `400 missing_code` (empty code), `400 code_too_long` (over 256 char
 
 Purpose: Import referral codes in batch. Any non-empty `import` query value triggers the batch mode.
 
-The request body is a JSON array; item fields are `referral_code` (required), `policy_id` (optional), `expires_at_ms` (optional, int or numeric string), and `project_id` (optional; if present it must equal the deployment project):
+The request body is a JSON array; item fields are `referral_code` (required), `policy_id` (optional), `expires_at_ms` (optional, int or numeric string), and `project_id` (optional and **ignored** — the REST path always forces the deployment project; any value supplied per item is neither validated nor used. This differs from the `/control-plane` action batch mode, which requires an item `project_id` to match the top-level one):
 
 ```json
 [

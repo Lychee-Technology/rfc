@@ -69,6 +69,8 @@ Authenticated requests without the admin policy return:
 
 All org writes (POST/PATCH/PUT/DELETE) still require admin. Unknown routes 404 **after** authorization, so the route table cannot be probed with unauthorized requests.
 
+**The one exception: CORS preflight.** Any `OPTIONS` request returns `204 No Content` **before** authorization and route matching (CORS headers only, no body — and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
+
 ### 2.2 Project Scope
 
 LTBase currently supports single-project private deployment for the control plane.
@@ -258,7 +260,7 @@ The user object shape returned by the org and auth REST routes (`apiPublicAuthUs
 }
 ```
 
-Note: the public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (see `API-specs-auth-service.en.md` §4.1).
+Note: the public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (the snapshot-specific shape is documented in `API-specs-auth-service.en.md` §5).
 
 ### 4.2 OrgUnit
 
@@ -1128,7 +1130,7 @@ This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST AP
 Behavior notes:
 
 - Existing referral codes are **skipped** (conditional write) and counted as `skipped_existing`.
-- `policy_id` is validated at write time: unknown policies return a `policy_not_found` error.
+- `policy_id` is validated at write time, but the error code differs between the two entry points: the REST endpoints (`POST /api/v1/auth/referrals` and `?import=1`) translate an unknown policy to `400 policy_not_found`; this action does **not** perform that translation — an unknown policy is returned together with all other import failures as `500 import_referrals_failed` (the underlying cause appears in the error message).
 - When `policy_id` is a slug, it is resolved to the durable `policy_id` before persistence.
 - Omitting `policy_id` preserves legacy binding behavior (no automatic policy attachment on identity binding).
 - On the REST referral resource, `PATCH /api/v1/auth/referrals/{code}` accepts only `expires_at_ms`; `policy_id` is not an accepted PATCH field and is silently ignored (not rejected). Treat the binding as effectively immutable after creation.
