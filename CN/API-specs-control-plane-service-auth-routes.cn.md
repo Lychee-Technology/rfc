@@ -31,7 +31,7 @@ Control-plane admin REST surface 按路由族拆分：
 - referral 路由双挂载：`/auth/referrals...` 与顶层 `/referrals...` 是同一 handler 的两个别名。
 - `GET /api/v1/auth-config` 是 `GET /api/v1/auth/config` 的 legacy 别名。
 
-命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go`）；本文档描述的是 control plane 提供的 admin 管理面，两者互不重叠。
+命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go` 与 `API-specs-authservice.cn.md`）；本文档描述的是 control plane 提供的 admin 管理面，两者互不重叠。
 
 ## 2. 认证、作用域与公共约定
 

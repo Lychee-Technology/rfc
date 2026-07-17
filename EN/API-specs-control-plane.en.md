@@ -24,7 +24,7 @@ How routes are served:
 - Every REST route is mounted under **two prefixes**: `/api/v1/...` and `/api/control-plane/v1/...` (`routemanifest.ControlPlanePrefixes`). Both prefixes behave identically.
 - The route table (`ControlPlaneRouteSuffixes` in `internal/routemanifest/controlplane.go`) is a load-bearing allowlist: any request whose `METHOD /path` does not match a table entry returns `404` — after authorization.
 
-Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go`); the control plane serves the admin surface described in this document and `API-specs-control-plane-service-auth-routes.en.md`. The two route sets do not overlap.
+Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go` and `API-specs-authservice.en.md`); the control plane serves the admin surface described in this document and `API-specs-control-plane-service-auth-routes.en.md`. The two route sets do not overlap.
 
 ## 2. Authentication, Scope, and Shared Conventions
 

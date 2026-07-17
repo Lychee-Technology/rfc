@@ -24,7 +24,7 @@ Control-plane admin REST surface 按路由族拆分：
 - 所有 REST 路由同时挂载在 **两个前缀** 下：`/api/v1/...` 与 `/api/control-plane/v1/...`（`routemanifest.ControlPlanePrefixes`）。两个前缀行为完全一致。
 - 路由表（`internal/routemanifest/controlplane.go` 的 `ControlPlaneRouteSuffixes`）是 load-bearing 的 allowlist：不匹配表内 `METHOD /path` 的请求在鉴权之后一律返回 `404`。
 
-命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go`）；control plane 提供本文档与 `API-specs-control-plane-service-auth-routes.cn.md` 描述的 admin 管理面。两者互不重叠。
+命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go` 与 `API-specs-authservice.cn.md`）；control plane 提供本文档与 `API-specs-control-plane-service-auth-routes.cn.md` 描述的 admin 管理面。两者互不重叠。
 
 ## 2. 认证、作用域与公共约定
 
