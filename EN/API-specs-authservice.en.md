@@ -35,7 +35,11 @@ The service does not validate the caller's credential itself. The API Gateway JW
 
 ### 2.2 Project Scope
 
-The service runs in single-project scope: the deployment project is configured via `PROJECT_ID`. A request may carry `project_id` (in the body or, for login, in a claim), and it is resolved as: request body → authorizer claim (login only) → configured default. Any explicitly provided value must be a valid UUID and equal the configured default, otherwise the request is rejected (`invalid_project_id` / `invalid_project_scope`).
+The service runs in single-project scope: the deployment project is configured via `PROJECT_ID`.
+
+The **body-based project resolution** used by `login/{provider}`, `id_bindings/{provider}`, and `auth/revoke` resolves `project_id` as: request body → authorizer claim (login only) → configured default; any explicitly provided value must be a valid UUID and equal the configured default, otherwise the request is rejected (`invalid_project_id` / `invalid_project_scope`).
+
+`auth/profile/{user_id}` and `auth/refresh` do **not** run that check: they use the `project_id` claim from the authorizer JWT directly (profile: `handler_profile.go`; refresh: `handler.go` / `service.go`). Because an LTBase-issued access or refresh token is already minted for the deployment project, the effective scope is the same in a single-project deployment — but the handlers trust the claim rather than re-comparing it to `PROJECT_ID`. See §5.4 and §5.6.
 
 ### 2.3 Request/Response Conventions
 
@@ -52,20 +56,32 @@ The service runs in single-project scope: the deployment project is configured v
 
 ### 2.4 JWKS Publication
 
-The service's signing public keys are **not served by a route**. The former `GET /auth/jwks.json` route was removed and now returns `404 not_found`. The JWKS document is published as a static release artifact and hosted at the URL configured by `AUTH_JWKS_URL`; the service itself fetches that URL to verify its own previously-issued access tokens during refresh. JWK format: `{"kty":"RSA","alg":"RS256","use":"sig","kid":"...","n":"...","e":"..."}`.
+The service's signing public keys are **not served by a route**. The former `GET /auth/jwks.json` route was removed and now returns `404 not_found`. The JWKS document is published as a static release artifact and hosted at the URL configured by `AUTH_JWKS_URL`; the service itself fetches that URL to verify its own previously-issued access tokens during refresh.
+
+The document is a standard JWKS with a top-level `keys` array (as emitted by `signer.go` `buildRSAJWKS` and required by the refresh-time verifier in `access_token_verify.go`):
+
+```json
+{
+  "keys": [
+    { "kty": "RSA", "alg": "RS256", "use": "sig", "kid": "...", "n": "...", "e": "..." }
+  ]
+}
+```
 
 ## 3. Route Summary
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/api/v1/auth/health` | Liveness check |
-| POST | `/api/v1/login/{provider}` | Exchange an upstream identity for an LTBase token pair |
-| POST | `/api/v1/id_bindings/{provider}` | Bind an external identity (with invite/referral code) and issue tokens |
-| POST | `/api/v1/auth/refresh` | Rotate a refresh token into a new token pair |
-| POST | `/api/v1/auth/revoke` | Revoke a refresh chain |
-| GET | `/api/v1/auth/profile/{user_id}` | Project-scoped public profile lookup |
+The Authorizer column lists the API Gateway authorizer that fronts each route in the reference deployment (`ltbase-private-deployment/infra/internal/services/apigateway_routes.go` `buildAuthRouteSpecs`).
 
-The `{provider}` routes carry the `expand: provider` marker in the route manifest (`routemanifest.ExpandProvider`): the deployment declares one concrete gateway route per configured provider. The provider path value is lowercased and must be in the `AUTH_PROVIDERS` allowlist.
+| Method | Path | Authorizer | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/auth/health` | none | Liveness check |
+| POST | `/api/v1/login/{provider}` | provider IdP | Exchange an upstream identity for an LTBase token pair |
+| POST | `/api/v1/id_bindings/{provider}` | provider IdP | Bind an external identity (with invite/referral code) and issue tokens |
+| POST | `/api/v1/auth/refresh` | `LTBaseRefresh` (refresh JWT) | Rotate a refresh token into a new token pair |
+| POST | `/api/v1/auth/revoke` | `LTBase` (access JWT) | Revoke a refresh chain |
+| GET | `/api/v1/auth/profile/{user_id}` | `LTBase` (access JWT) | Project-scoped public profile lookup |
+
+The `{provider}` routes carry the `expand: provider` marker in the route manifest (`routemanifest.ExpandProvider`). The deployment expands them into concrete `POST /api/v1/login/<provider>` and `POST /api/v1/id_bindings/<provider>` routes **only for providers whose `EnableLogin` / `EnableIDBinding` flag is set** — a configured provider with the flag off gets no route. Each provider route is fronted by that provider's own IdP authorizer. The provider path value is lowercased and must be in the `AUTH_PROVIDERS` allowlist.
 
 ## 4. Token Model
 
@@ -124,11 +140,13 @@ Default TTL: 672 hours / 28 days (`AUTH_REFRESH_TTL`).
 
 ### 4.4 Rotation and Reuse Detection
 
-Every successful exchange or refresh persists a refresh session keyed by the refresh token's `jti`, linked to its parent via `parent_jti`. On refresh:
+Every successful exchange or refresh persists a refresh session keyed by the refresh token's `jti`, linked to its parent via `parent_jti`. On refresh, the Lambda's session validation (`service.go`):
 
-- an expired refresh token revokes its chain with reason `expired` and returns `refresh_expired`;
-- a revoked session returns `refresh_revoked`;
-- reuse of an already-rotated refresh token revokes the **entire chain** with reason `refresh_reuse` and returns `refresh_revoked`.
+- treats an expired refresh token as a chain-revoke with reason `expired` and returns `refresh_expired`;
+- returns `refresh_revoked` for a revoked session;
+- treats reuse of an already-rotated refresh token as a chain-revoke of the **entire chain** with reason `refresh_reuse` and returns `refresh_revoked`.
+
+Gateway interaction with the expiry check: because `auth/refresh` is fronted by the `LTBaseRefresh` JWT authorizer (which validates the refresh JWT's `exp`), an already-expired refresh token is rejected with `401` at the gateway before the Lambda runs. The Lambda's own `refresh_expired` path is therefore defense-in-depth (e.g. direct invocation or an authorizer that does not enforce `exp`) rather than the path a gateway-fronted client normally hits — see §5.4.
 
 Successful exchange, refresh, revoke, and binding operations each write an audit entry (`action`: `exchange` / `refresh` / `revoke` / `id_binding`).
 
@@ -136,13 +154,15 @@ Successful exchange, refresh, revoke, and binding operations each write an audit
 
 ### 5.1 `GET /api/v1/auth/health`
 
-Purpose: liveness check. No authorizer, no parameters.
+Purpose: liveness check. No authorizer, no request body, no parameters.
 
 Response (`200 OK`):
 
 ```json
 { "status": "ok" }
 ```
+
+This endpoint has no error responses: it unconditionally returns `200`.
 
 ### 5.2 `POST /api/v1/login/{provider}`
 
@@ -200,7 +220,12 @@ Request body (required):
 
 Response (`200 OK`): same shape as login — `access_token`, `refresh_token`, `api_base_url`.
 
-Binding policies: enabled policies are loaded per project; when none exist, the built-in fallback policy `referral.default` applies, requiring `referral_valid == true`. Rules have the shape `{l, c, a, v}` (left operand, comparator, action, value) evaluated over the context fields `project_id, provider, issuer, sub, email, code, referral_exists, referral_used, referral_valid`. Comparators: `eq, ne, exists, not_exists, truthy, falsy, contains, prefix, in, not_in`; actions: `must` (also `require`/`allow_if`) and `deny_if` (also `deny`). Enforcement is gated by `AUTH_BINDING_POLICY_SHADOW_MODE` (evaluate and audit but never deny) and `AUTH_BINDING_POLICY_ALLOWLIST` (enforce only for listed projects; empty = all). `REFERRAL_REQUIRED=true` appends the default referral rule when no stored policy has one.
+Binding policies: enabled policies are loaded per project; when none exist, the built-in fallback policy `referral.default` applies, requiring `referral_valid == true`. Rules have the shape `{l, c, a, v}` (left operand, comparator, action, value) evaluated over the context fields `project_id, provider, issuer, sub, email, code, referral_exists, referral_used, referral_valid`. Comparators: `eq, ne, exists, not_exists, truthy, falsy, contains, prefix, in, not_in`; actions: `must` (also `require`/`allow_if`) and `deny_if` (also `deny`). `REFERRAL_REQUIRED=true` appends the default referral rule when no stored policy has one.
+
+Enforcement gating (`handler_binding.go`):
+
+- `AUTH_BINDING_POLICY_ALLOWLIST` — enforce policies only for the listed projects (empty = all).
+- `AUTH_BINDING_POLICY_SHADOW_MODE` — suppresses the **policy-engine deny branch**: a `decision.Allowed == false` is audited but does not raise `ErrPolicyDenied`. It does **not** make binding "never deny." The write path still derives `RequireReferral` from the active policies (including the fallback `referral.default`), and when a referral is required the repository consumes/validates it during the bind transaction; an invalid or already-used referral still fails and surfaces as `409 invalid_code`. In other words, shadow mode relaxes explicit policy `deny_if` outcomes, not the referral-consumption requirement.
 
 If the identity is already bound to a user, the binding call resolves the existing user, refreshes its referral-code record, and still returns a token pair (idempotent re-bind); `identity_bound` is only returned when the existing user cannot be resolved consistently.
 
@@ -230,7 +255,9 @@ Request body (required):
 { "access_token": "<current access jwt>" }
 ```
 
-The provided `access_token` is verified against the JWKS at `AUTH_JWKS_URL`: RS256 signature (key selected by `kid`), `token_use` must be `access`, and `iss` must equal the configured issuer. Its expiry is deliberately **not** checked — refreshing after the access token has expired is the normal case. Failure → `401 access_invalid`.
+The provided `access_token` is verified against the JWKS at `AUTH_JWKS_URL` (`access_token_verify.go`), but the verification is intentionally narrow: it checks only the RS256 signature (key selected by `kid`), that `token_use` is `access`, and that `iss` equals the configured issuer. Standard claim validation is disabled — expiry (`exp`), `aud`, `sub`, `project_id`, and `jti` are **not** validated, and the token is not bound to the refresh token's subject/project. Skipping `exp` is deliberate (refreshing after the access token has expired is the normal case); the other omissions mean this check proves only that *an* access token from this issuer is presented, not that it belongs to the same session. Failure → `401 access_invalid`.
+
+Gateway note: an expired *refresh* token is rejected with `401` by the `LTBaseRefresh` authorizer before this handler runs, so the `refresh_expired` row below is not normally reachable through the deployed gateway (see §4.4).
 
 Response (`200 OK`; `expires_at` is the new access token's expiry, Unix seconds):
 
@@ -250,12 +277,14 @@ Errors:
 | 400 | `access_token_required` | `access_token` empty |
 | 401 | `access_invalid` | access token fails JWKS/`token_use`/issuer verification |
 | 401 | `refresh_invalid` | refresh claims incomplete or session validation failed for another reason |
-| 401 | `refresh_expired` | refresh token expired (chain revoked with reason `expired`) |
+| 401 | `refresh_expired` | refresh token expired (chain revoked with reason `expired`) — see the gateway note above; not normally reached through the deployed gateway |
 | 401 | `refresh_revoked` | session revoked, or rotated-token reuse detected (chain revoked with reason `refresh_reuse`) |
 
 ### 5.5 `POST /api/v1/auth/revoke`
 
 Purpose: revoke a refresh chain (e.g. logout, credential compromise).
+
+Authorizer: `LTBase` (an LTBase access-token JWT). Only the `project_id` claim participates in scope resolution.
 
 Request body:
 
@@ -268,6 +297,8 @@ Request body:
 ```
 
 `reason` is optional and defaults to `manual_revoke`. Revocation applies to the whole chain rooted at the given `jti`.
+
+Ownership caveat: the handler (`handler.go`) and `service.go` `Revoke` validate only that `project_id` resolves to the deployment project and that `jti` is non-empty; they do **not** verify that the `jti` belongs to the authenticated caller. Any caller holding a valid access token for the project can therefore revoke any refresh chain in that project whose `jti` they know. This documents the current behavior; enforcing caller-to-session ownership is an implementation concern for `ltbase.api` and is out of scope for this docs change (see the PR discussion).
 
 Response (`200 OK`):
 
@@ -288,9 +319,9 @@ Errors:
 
 Purpose: public profile lookup, scoped to the caller's project. Any authenticated caller in the project can read same-project public profiles.
 
-Authorizer claim consumed: `project_id` (required → otherwise `401 auth_required`).
+Authorizer: `LTBase` (access JWT). Claim consumed: `project_id` (required → otherwise `401 auth_required`). The lookup uses this claim's `project_id` **directly** as the query scope; it is not compared against `PROJECT_ID` (see §2.2).
 
-Path parameter: `{user_id}`.
+Request: no request body. Path parameter: `{user_id}`.
 
 Response (`200 OK`; timestamps are Unix **milliseconds**; `email`, `display_name`, `primary_ou_id`, `report_to_user_id` are omitted when empty; `display_name` falls back from the `display_name` identity claim to `name`):
 
