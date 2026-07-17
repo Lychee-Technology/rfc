@@ -27,7 +27,7 @@
 - Discovery：语义图可达性与路径查询
 - Intent-to-Action Planning：意图规划、计划执行、执行状态查询
 
-认证服务管理接口见 `API-specs-auth-service.cn.md`。
+认证服务管理接口见 `API-specs-control-plane-service-auth-routes.cn.md`。
 
 Control plane 组织管理与 `/control-plane` 运维接口见 `API-specs-control-plane.cn.md`。
 

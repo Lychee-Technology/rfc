@@ -13,7 +13,7 @@ This document describes the implemented control-plane admin REST API contract fo
 
 The control-plane admin REST surface is split into route families:
 
-- `/api/v1/auth/...` for AAA configuration and referral administration (see `API-specs-auth-service.en.md`)
+- `/api/v1/auth/...` for AAA configuration and referral administration (see `API-specs-control-plane-service-auth-routes.en.md`)
 - `/api/v1/org/...` for org-chart and OU administration
 - operational and catalog routes: `/status`, `/schema/status`, `/repair/*`, `/catalogs/*`, `/compliance-profile`, `/workflows`
 
@@ -24,7 +24,7 @@ How routes are served:
 - Every REST route is mounted under **two prefixes**: `/api/v1/...` and `/api/control-plane/v1/...` (`routemanifest.ControlPlanePrefixes`). Both prefixes behave identically.
 - The route table (`ControlPlaneRouteSuffixes` in `internal/routemanifest/controlplane.go`) is a load-bearing allowlist: any request whose `METHOD /path` does not match a table entry returns `404` — after authorization.
 
-Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go`); the control plane serves the admin surface described in this document and `API-specs-auth-service.en.md`. The two route sets do not overlap.
+Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go`); the control plane serves the admin surface described in this document and `API-specs-control-plane-service-auth-routes.en.md`. The two route sets do not overlap.
 
 ## 2. Authentication, Scope, and Shared Conventions
 
@@ -260,7 +260,7 @@ The user object shape returned by the org and auth REST routes (`apiPublicAuthUs
 }
 ```
 
-Note: the public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (the snapshot-specific shape is documented in `API-specs-auth-service.en.md` §5).
+Note: the public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (the snapshot-specific shape is documented in `API-specs-control-plane-service-auth-routes.en.md` §5).
 
 ### 4.2 OrgUnit
 
@@ -937,7 +937,7 @@ HTTP status: `ensure-project`, `create-iam-authz-records`, and `import-referrals
 
 Purpose: Bulk-create IAM/authz records (role profiles, policy profiles, principal-policy attachments, and user-role attachments) for a project.
 
-This is a lower-level seed/migration action. For the productized policy management contract, use `POST /api/v1/auth/policies` (see `API-specs-auth-service.en.md`).
+This is a lower-level seed/migration action. For the productized policy management contract, use `POST /api/v1/auth/policies` (see `API-specs-control-plane-service-auth-routes.en.md`).
 
 **Supported `kind` values:**
 
@@ -1071,7 +1071,7 @@ If an admin already exists via the REST Admin API, you can also bind using the R
 
 Purpose: Import one or more referral codes into a project, optionally with a bound policy ID.
 
-This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST API (see `API-specs-auth-service.en.md`).
+This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST API (see `API-specs-control-plane-service-auth-routes.en.md`).
 
 **Batch mode** (via `data` array):
 

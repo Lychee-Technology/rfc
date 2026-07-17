@@ -7,7 +7,7 @@ Technical ideas which request for comments
 
 * `EN/API-specs.en.md` - index for split LTBase API specifications
 * `EN/API-specs-data-plane.en.md` - current data-plane API specification
-* `EN/API-specs-auth-service.en.md` - auth-service admin API specification
+* `EN/API-specs-control-plane-service-auth-routes.en.md` - auth-service admin API specification
 * `EN/API-specs-control-plane.en.md` - control-plane org and operational API specification
 * `EN/api-specification.md` - legacy data-plane API specification with embedded OpenAPI 3.0 definition (migrated from `ltbase.api/docs`; superseded by `API-specs-data-plane.en.md`)
 
@@ -15,7 +15,7 @@ Technical ideas which request for comments
 
 * `CN/API-specs.cn.md` - LTBase API specification index in Chinese
 * `CN/API-specs-data-plane.cn.md` - current data-plane API specification in Chinese
-* `CN/API-specs-auth-service.cn.md` - auth-service admin API specification in Chinese
+* `CN/API-specs-control-plane-service-auth-routes.cn.md` - auth-service admin API specification in Chinese
 * `CN/API-specs-control-plane.cn.md` - control-plane org and operational API specification in Chinese
 * `CN/control-plane-rest-admin-api.md` - control-plane REST Admin API reference (migrated from `ltbase.api/docs`)
 * `CN/control-plane-cli.legacy.md` - legacy Control Plane Action API / Lambda Console manual (migrated from `ltbase.api/docs`; superseded by `CN/control-plane-cli.md`)

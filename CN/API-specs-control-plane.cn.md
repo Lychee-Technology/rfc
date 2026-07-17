@@ -13,7 +13,7 @@
 
 Control-plane admin REST surface 按路由族拆分：
 
-- `/api/v1/auth/...`：AAA 配置与 referral 管理（见 `API-specs-auth-service.cn.md`）
+- `/api/v1/auth/...`：AAA 配置与 referral 管理（见 `API-specs-control-plane-service-auth-routes.cn.md`）
 - `/api/v1/org/...`：组织架构与 OU 管理
 - 运维与目录路由：`/status`、`/schema/status`、`/repair/*`、`/catalogs/*`、`/compliance-profile`、`/workflows`
 
@@ -24,7 +24,7 @@ Control-plane admin REST surface 按路由族拆分：
 - 所有 REST 路由同时挂载在 **两个前缀** 下：`/api/v1/...` 与 `/api/control-plane/v1/...`（`routemanifest.ControlPlanePrefixes`）。两个前缀行为完全一致。
 - 路由表（`internal/routemanifest/controlplane.go` 的 `ControlPlaneRouteSuffixes`）是 load-bearing 的 allowlist：不匹配表内 `METHOD /path` 的请求在鉴权之后一律返回 `404`。
 
-命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go`）；control plane 提供本文档与 `API-specs-auth-service.cn.md` 描述的 admin 管理面。两者互不重叠。
+命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go`）；control plane 提供本文档与 `API-specs-control-plane-service-auth-routes.cn.md` 描述的 admin 管理面。两者互不重叠。
 
 ## 2. 认证、作用域与公共约定
 
@@ -258,7 +258,7 @@ org 与 auth REST 路由返回的用户对象形状（`apiPublicAuthUser`）：
 }
 ```
 
-说明：公开 DTO **不含** `referral_code`；只有 `GET /api/v1/auth/config` 快照中的用户对象包含 `referral_code`（快照专用形状见 `API-specs-auth-service.cn.md` §5）。
+说明：公开 DTO **不含** `referral_code`；只有 `GET /api/v1/auth/config` 快照中的用户对象包含 `referral_code`（快照专用形状见 `API-specs-control-plane-service-auth-routes.cn.md` §5）。
 
 ### 4.2 OrgUnit
 
@@ -935,7 +935,7 @@ HTTP 状态：`ensure-project`、`create-iam-authz-records`、`import-referrals`
 
 用途：为 project 批量创建 IAM/authz 记录（role profile、policy profile、principal-policy attachment 和 user-role attachment）。
 
-这是一个更底层的种子/迁移 action。产品化 policy 管理请使用 `POST /api/v1/auth/policies`（见 `API-specs-auth-service.cn.md`）。
+这是一个更底层的种子/迁移 action。产品化 policy 管理请使用 `POST /api/v1/auth/policies`（见 `API-specs-control-plane-service-auth-routes.cn.md`）。
 
 **支持的 `kind`：**
 
@@ -1069,7 +1069,7 @@ admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检
 
 用途：向 project 导入一个或多个 referral code，可附带绑定的 policy ID。
 
-该 action 对应 REST API 的 `POST /api/v1/auth/referrals?import=1`（见 `API-specs-auth-service.cn.md`）。
+该 action 对应 REST API 的 `POST /api/v1/auth/referrals?import=1`（见 `API-specs-control-plane-service-auth-routes.cn.md`）。
 
 **批量模式**（通过 `data` 数组）：
 

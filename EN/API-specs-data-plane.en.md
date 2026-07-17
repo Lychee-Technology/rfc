@@ -27,7 +27,7 @@ The current data plane provides the following capabilities:
 - Discovery: semantic graph reachability and path queries
 - Intent-to-Action Planning: intent planning, plan execution, and execution status lookup
 
-For auth-service admin APIs, see `API-specs-auth-service.en.md`.
+For auth-service admin APIs, see `API-specs-control-plane-service-auth-routes.en.md`.
 
 For control-plane org and operational APIs, see `API-specs-control-plane.en.md`.
 
