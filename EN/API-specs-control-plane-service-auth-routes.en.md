@@ -31,7 +31,7 @@ How routes are served:
 - The referral routes are dual-mounted: `/auth/referrals...` and top-level `/referrals...` are two aliases of the same handler.
 - `GET /api/v1/auth-config` is a legacy alias of `GET /api/v1/auth/config`.
 
-Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go`). This document describes the admin surface served by the control plane; the two route sets do not overlap.
+Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go` and `API-specs-authservice.en.md`). This document describes the admin surface served by the control plane; the two route sets do not overlap.
 
 ## 2. Authentication, Scope, and Shared Conventions
 
