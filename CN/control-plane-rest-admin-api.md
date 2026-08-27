@@ -147,7 +147,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 
 - 创建请求 body 当前只接收 `name`、`description`、`parent_role_ids`
 - `role_id` 由服务端生成的 durable UUIDv7（参见 #376），不是客户端输入字段
-- 响应包含 `slug`（人类可读语义名）与 `external_key`（导入/部署稳定键）字段；REST 创建不接受这两个输入，故 REST 创建的角色通常为空，需通过 action API import 写入
+- 响应包含 `slug`（人类可读语义名）与 `external_key`（导入/部署稳定键）字段；REST 创建不接受这两个输入，故 REST 创建的角色这两个字段通常为空，需通过 action API import 写入
 - 设计 spec 中的 `PATCH /api/v1/auth/roles/{role_id}` 当前尚未实现
 
 ### 4.4 Auth Policies
@@ -163,7 +163,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 
 - 创建请求 body 当前只接收 `name`、`description`、`policy_document`
 - `policy_id` 由服务端生成的 durable UUIDv7（参见 #376），不是客户端输入字段
-- 响应包含 `slug`（人类可读语义名）与 `external_key`（导入/部署稳定键）字段；REST 创建不接受这两个输入，故 REST 创建的策略通常为空，需通过 action API import 写入
+- 响应包含 `slug`（人类可读语义名）与 `external_key`（导入/部署稳定键）字段；REST 创建不接受这两个输入，故 REST 创建的策略这两个字段通常为空，需通过 action API import 写入
 - 设计 spec 中的 `PATCH /api/v1/auth/policies/{policy_id}` 当前尚未实现
 
 ### 4.5 Principal Policy Attachments
@@ -316,49 +316,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 | `GET` | `/api/v1/compliance-profile` | 获取 compliance profile |
 | `PUT` | `/api/v1/compliance-profile` | 更新 compliance profile |
 
-## 5. REST Admin API 与 Action API 的边界
-
-两套接口的职责不同：
-
-### REST Admin API 适合：
-
-- 管理后台读取与编辑 AAA 配置
-- 管理后台读取与编辑组织架构
-- 自动化脚本按资源粒度做增量变更
-- 统一使用 JWT claims 做管理员鉴权
-
-### `/control-plane` Action API 适合：
-
-- AWS Lambda Console Test
-- CLI 工具直接调用 Lambda action
-- `ensure-project`、`repair-project` 这类动作型运维操作
-- 兼容旧有 action payload 工作流
-- 显式触发 `migrate-authz-policy-model` 等迁移动作
-
-不要把 REST 资源写入与 action 风格 invoke payload 混用在同一个客户端抽象里。
-
-## 6. 当前实现与设计 spec 的差异
-
-`docs/superpowers/specs/2026-05-22-control-plane-aaa-org-chart-rest-api-design.md` 定义了更完整的 V1 目标，当前代码已实现其中的大部分读写面，但仍有差异：
-
-- `PATCH /api/v1/auth/roles/{role_id}` 尚未实现
-- `PATCH /api/v1/auth/policies/{policy_id}` 尚未实现
-- role / policy create body 目前不接收 spec 示例中的显式 ID 字段，而是服务端生成
-- authservice 仍然负责登录、binding、token issuance，不属于 control-plane REST admin API
-
-做前端或自动化集成时请以当前实现为准，不要假设 spec 中所有目标接口都已落地。
-
-## 7. 验证建议
-
-更新文档或对接客户端前，建议先用以下命令确认接口实现仍与文档一致：
-
-```bash
-go test ./cmd/controlplane -count=1
-```
-
-如需进一步检查路由覆盖，可在仓库中搜索：
-
-### 4.11 Catalogs: Assistant Roles
+### 4.14 Catalogs: Assistant Roles
 
 | Method | Path | 说明 |
 | --- | --- | --- |
@@ -404,7 +362,47 @@ GET 未配置时返回：
 }
 ```
 
-## 参考实现
+## 5. REST Admin API 与 Action API 的边界
+
+两套接口的职责不同：
+
+### REST Admin API 适合：
+
+- 管理后台读取与编辑 AAA 配置
+- 管理后台读取与编辑组织架构
+- 自动化脚本按资源粒度做增量变更
+- 统一使用 JWT claims 做管理员鉴权
+
+### `/control-plane` Action API 适合：
+
+- AWS Lambda Console Test
+- CLI 工具直接调用 Lambda action
+- `ensure-project`、`repair-project` 这类动作型运维操作
+- 兼容旧有 action payload 工作流
+- 显式触发 `migrate-authz-policy-model` 等迁移动作
+
+不要把 REST 资源写入与 action 风格 invoke payload 混用在同一个客户端抽象里。
+
+## 6. 当前实现与设计 spec 的差异
+
+`docs/superpowers/specs/2026-05-22-control-plane-aaa-org-chart-rest-api-design.md` 定义了更完整的 V1 目标，当前代码已实现其中的大部分读写面，但仍有差异：
+
+- `PATCH /api/v1/auth/roles/{role_id}` 尚未实现
+- `PATCH /api/v1/auth/policies/{policy_id}` 尚未实现
+- role / policy create body 目前不接收 spec 示例中的显式 ID 字段，而是服务端生成
+- authservice 仍然负责登录、binding、token issuance，不属于 control-plane REST admin API
+
+做前端或自动化集成时请以当前实现为准，不要假设 spec 中所有目标接口都已落地。
+
+## 7. 验证建议
+
+更新文档或对接客户端前，建议先用以下命令确认接口实现仍与文档一致：
+
+```bash
+go test ./cmd/controlplane -count=1
+```
+
+如需进一步检查路由覆盖，可在仓库中搜索：
 
 ```bash
 rg '/api/v1/(auth|org|status|schema|repair|catalogs|compliance-profile|workflows)' cmd/controlplane

@@ -1017,7 +1017,7 @@ The full ontology API surface (route list, request/response examples, error sema
 
 ## 12. Governance API
 
-### 11.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
+### 12.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
 
 Purpose: Retrieve the capability and policy view associated with an entity.
 
@@ -1033,7 +1033,7 @@ Response:
 
 Status codes: `200`, `400`, `401`, `404`, `500`
 
-### 11.2 `GET /api/sys/v1/governance/capabilities/{capability_name}`
+### 12.2 `GET /api/sys/v1/governance/capabilities/{capability_name}`
 
 Purpose: Retrieve the entities and policies associated with a capability.
 
@@ -1049,7 +1049,7 @@ Response:
 
 Status codes: `200`, `400`, `401`, `404`, `500`
 
-### 11.3 `GET /api/sys/v1/governance/policies/{policy_id}/capabilities`
+### 12.3 `GET /api/sys/v1/governance/policies/{policy_id}/capabilities`
 
 Purpose: Retrieve the capabilities and entities associated with a policy.
 

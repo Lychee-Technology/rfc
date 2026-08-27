@@ -2,7 +2,7 @@
 
 ## Unique Property 
 
-在JSON Schema中，我们可以使用 `x-unique-properties` 来指定某个属性在同一 `schema` 下必须唯一。例如：
+在JSON Schema中，我们可以使用 `x-unique-property` 来指定某个属性在同一 `schema` 下必须唯一。例如：
 
 ```json
 {
