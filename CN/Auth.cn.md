@@ -40,7 +40,7 @@ Access Key 和 Access Secret 用于 API 请求的身份认证。每个 Tenant �
 ## 认证流程
 
 1. **提取认证信息**：从请求头 `Authorization` 中提取。Authorization Header 式样为 `LtBase {Access Key ID}:{Signature}:{Timestamp}:{Nonce}`
-   - `Access Ke ID`: 访问密钥的ID
+   - `Access Key ID`: 访问密钥的ID
    - `Signature`: 使用 Access Secret 对签名字符串进行签名后的 Base64 URL 安全编码结果
    - `Timestamp`: 请求发起的 Unix 时间戳（毫秒）
    - `Nonce`: 随机字符串，防止重放攻击
