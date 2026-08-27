@@ -338,13 +338,13 @@ Action API 与 REST Admin API 不应该混用：
 
 ## 6. DynamoDB 对象模型
 
-### 5.1 Project Metadata
+### 6.1 Project Metadata
 
 - `PK = project#<project_id>`
 - `SK = meta`
 - 字段：`name`、`account_id`、`updated_at`
 
-### 5.2 Project Runtime Info
+### 6.2 Project Runtime Info
 
 - `PK = project#<project_id>`
 - `SK = info`

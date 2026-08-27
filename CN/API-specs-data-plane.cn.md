@@ -1017,7 +1017,7 @@ Ontology 路由是项目作用域、只读的语义层和 Forma 层适配器，�
 
 ## 12. Governance API
 
-### 11.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
+### 12.1 `GET /api/sys/v1/governance/entities/{entity_name}/capabilities`
 
 用途：查询一个实体可关联的 capability / policy 视图。
 
@@ -1033,7 +1033,7 @@ Ontology 路由是项目作用域、只读的语义层和 Forma 层适配器，�
 
 状态码：`200`、`400`、`401`、`404`、`500`
 
-### 11.2 `GET /api/sys/v1/governance/capabilities/{capability_name}`
+### 12.2 `GET /api/sys/v1/governance/capabilities/{capability_name}`
 
 用途：查询一个 capability 对应的实体与策略。
 
@@ -1049,7 +1049,7 @@ Ontology 路由是项目作用域、只读的语义层和 Forma 层适配器，�
 
 状态码：`200`、`400`、`401`、`404`、`500`
 
-### 11.3 `GET /api/sys/v1/governance/policies/{policy_id}/capabilities`
+### 12.3 `GET /api/sys/v1/governance/policies/{policy_id}/capabilities`
 
 用途：查询一个 policy 关联的 capability 与 entity。
 
