@@ -1,6 +1,6 @@
 # Control Plane Action API 与 AWS Lambda Console 调用手册
 
-本文档说明如何通过 **AWS Lambda Console 的 Test 功能**直接调用 Control Plane Lambda 的 action 风格接口，用于运维和排查。
+本文档说明如何通过 AWS Lambda Console 的 Test 功能直接调用 Control Plane Lambda 的 action 风格接口，用于运维和排查。
 
 这不是 `cmd/controlplane` 的 REST Admin API 文档。
 
@@ -263,7 +263,7 @@ Action API 的典型入口有两种：
 - `dynamodb` 模式下写入 DynamoDB referral records
 - `postgres` 模式下写入 PostgreSQL `controlplane_referrals`
 
-> 可选的 `referral_policy_id`（单条）/ `policy_id`（`data` 元素）接受 policy 的 **slug** 或 **durable UUIDv7**，写入时解析为 durable UUIDv7 存储；引用不存在的 policy 返回 `400 policy_not_found`。字段语义与契约详见 `docs/toos/import-referral.md` 与 #376。
+> 可选的 `referral_policy_id`（单条）/ `policy_id`（`data` 元素）接受 policy 的 slug 或 durable UUIDv7，写入时解析为 durable UUIDv7 存储；引用不存在的 policy 返回 `400 policy_not_found`。字段语义与契约详见 `docs/toos/import-referral.md` 与 #376。
 
 **单条**：
 

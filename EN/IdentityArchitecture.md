@@ -1,8 +1,8 @@
-# **LTBase Identity & Authorization Architecture**
+# LTBase Identity & Authorization Architecture
 
-## **1. Architectural Positioning**
+## 1. Architectural Positioning
 
-LTBase is an **API-only AI-Native BaaS** platform.
+LTBase is an API-only AI-Native BaaS platform.
 
 LTBase:
 
@@ -17,10 +17,10 @@ LTBase:
 
 Therefore:
 
-LTBase must act as a **full OAuth 2.0 Authorization Server + Resource Server**, not as a session-based web backend.
+LTBase must act as a full OAuth 2.0 Authorization Server + Resource Server, not as a session-based web backend.
 
 
-## **2. High-Level Architecture**
+## 2. High-Level Architecture
 
 ```
                 ┌────────────────────┐  
@@ -58,9 +58,9 @@ External Social Providers:
 * Supabase
 * etc.
 
-Auth Server federates identity but issues **internal LTBase tokens only**.
+Auth Server federates identity but issues internal LTBase tokens only.
 
-# **3. OAuth Role Model**
+# 3. OAuth Role Model
 
 | Role                 | LTBase Component      |
 | -------------------- | --------------------- |
@@ -69,9 +69,9 @@ Auth Server federates identity but issues **internal LTBase tokens only**.
 | Client               | External App / Server |
 | Identity Provider    | Social IdP            |
 
-# **4. Supported OAuth Grant Types**
+# 4. Supported OAuth Grant Types
 
-## **4.1 Authorization Code + PKCE**
+## 4.1 Authorization Code + PKCE
 
 Used by:
 
@@ -88,7 +88,7 @@ Flow:
 5. LTBase access + refresh token issued
 
 
-## **4.2 Client Credentials**
+## 4.2 Client Credentials
 
 Used for:
 
@@ -107,7 +107,7 @@ No user involved.
 
 ---
 
-## **4.3 Refresh Token**
+## 4.3 Refresh Token
 
 POST /oauth/token  
 grant_type=refresh_token  
@@ -120,9 +120,9 @@ Refresh tokens:
 * Reuse detection enabled
 
 
-## **5. Token Model**
+## 5. Token Model
 
-### **5.1 Access Token**
+### 5.1 Access Token
 
 Format: JWT
 
@@ -151,7 +151,7 @@ Important:
 * Only role_ids
 * Authorization engine resolves permissions dynamically
 
-### **5.2 Refresh Token**
+### 5.2 Refresh Token
 
 Format: opaque
 
@@ -172,15 +172,15 @@ PK: auth#project#{project_id}#session#{refresh_jti}
 SK: profile  
 ```
 
-### **5.3 ID Token**
+### 5.3 ID Token
 
 Only issued if client explicitly requires OIDC identity proof.
 
 Not used by LTBase API.
 
-## **6. OAuth Endpoints**
+## 6. OAuth Endpoints
 
-### **6.1 Token Endpoint**
+### 6.1 Token Endpoint
 
 `POST /oauth/token`
 
@@ -200,7 +200,7 @@ Response:
 }  
 ```
 
-### **6.2 Revocation Endpoint**
+### 6.2 Revocation Endpoint
 
 `POST /oauth/revoke`
 
@@ -212,9 +212,9 @@ token_type_hint=refresh_token
 ```
 
 
-## **7. Federated Identity Handling**
+## 7. Federated Identity Handling
 
-### **7.1 External Token Validation**
+### 7.1 External Token Validation
 
 Auth Server validates:
 
@@ -231,7 +231,7 @@ Then resolves:
 If not bound → IDENTITY_UNBOUND
 
 
-## **8. Identity Binding Layer (Unchanged Core Model)**
+## 8. Identity Binding Layer (Unchanged Core Model)
 
 Retains:
 
@@ -242,7 +242,7 @@ Retains:
 
 Binding remains atomic DynamoDB transaction.
 
-## **9. Resource Server (LTBase API)**
+## 9. Resource Server (LTBase API)
 
 LTBase API:
 
@@ -255,7 +255,7 @@ LTBase API:
 
 Never handles refresh tokens.
 
-## **10. Authorization Engine (Preserved)**
+## 10. Authorization Engine (Preserved)
 
 Unchanged from original AAA spec:
 
@@ -270,22 +270,22 @@ Unchanged from original AAA spec:
 JWT contains no permission logic.
 
 
-## **11. Client Type Security Rules**
+## 11. Client Type Security Rules
 
-### **11.1 Public Clients (Mobile / SPA)**
+### 11.1 Public Clients (Mobile / SPA)
 
 * Must use PKCE
 * No client_secret
 * Refresh token allowed but rotation enforced
 * Rate limits applied
 
-### **11.2 Confidential Clients (Server)**
+### 11.2 Confidential Clients (Server)
 
 * Use client_secret
 * Can hold refresh tokens securely
 * Stronger lifetime policies
 
-## **12. Machine-to-Machine Model**
+## 12. Machine-to-Machine Model
 
 For B2B API usage:
 
@@ -303,19 +303,19 @@ Access token:
 No refresh token required.
 
 
-## **13. Security Enhancements**
+## 13. Security Enhancements
 
-✔ Refresh token rotation
-✔ Refresh token reuse detection
-✔ Short access lifetime
-✔ Token revocation endpoint
-✔ JTI tracking
-✔ Project-scoped isolation
-✔ Strict issuer validation
-✔ No permission-in-JWT policy
+* Refresh token rotation
+* Refresh token reuse detection
+* Short access lifetime
+* Token revocation endpoint
+* JTI tracking
+* Project-scoped isolation
+* Strict issuer validation
+* No permission-in-JWT policy
 
 
-## **14. Sequence Diagram (Final)**
+## 14. Sequence Diagram (Final)
 
 ```
 Client -> Auth Server: Authorization Code  
@@ -332,23 +332,23 @@ Auth Server -> DynamoDB: Rotate session
 Auth Server -> Client: New tokens  
 ```
 
-## **15. Final Design Principles**
+## 15. Final Design Principles
 
 LTBase AAA now:
 
-✔ Fully OAuth compliant
-✔ API-only architecture safe
-✔ Supports federation
-✔ Supports M2M
-✔ Supports multi-tenant projects
-✔ Supports enterprise onboarding
-✔ Prevents token replay
-✔ Prevents permission drift
-✔ Separates Authentication / Identity Binding / Authorization
-✔ AI-safe policy model
+* Fully OAuth compliant
+* API-only architecture safe
+* Supports federation
+* Supports M2M
+* Supports multi-tenant projects
+* Supports enterprise onboarding
+* Prevents token replay
+* Prevents permission drift
+* Separates Authentication / Identity Binding / Authorization
+* AI-safe policy model
 
 
-## **16. What Changed From Original Spec**
+## 16. What Changed From Original Spec
 
 | Area                | Adjustment                           |
 | ------------------- | ------------------------------------ |

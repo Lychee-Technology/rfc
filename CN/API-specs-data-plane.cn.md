@@ -1013,7 +1013,7 @@ Query 参数：
 
 Ontology 路由是项目作用域、只读的语义层和 Forma 层适配器，提供对象中心的读取模型，不引入第二个图数据库。
 
-完整 ontology API surface —— 路由列表、请求/响应示例、错误语义、与 semantic/governance/discovery/planning/Forma 的关系 —— 见 `ltbase.api/docs/ontology-api.md`。
+完整 ontology API surface（路由列表、请求/响应示例、错误语义，以及与 semantic/governance/discovery/planning/Forma 的关系）见 `ltbase.api/docs/ontology-api.md`。
 
 ## 12. Governance API
 
@@ -1403,7 +1403,7 @@ Discovery 请求体使用以下结构：
 
 ## 15. 与旧版 spec 的主要差异
 
-相较此前基于旧 handler 快照的文档，当前实现有以下关键变化：
+相较此前基于旧 handler 快照的文档，当前实现有以下变化：
 
 - `owner_id` 已不再作为 Notes / CRUD 主流程的可信输入，统一以 JWT `sub`/`user_id` 为准
 - Notes 列表已支持 `schema_name` 过滤

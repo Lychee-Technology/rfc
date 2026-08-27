@@ -101,7 +101,7 @@ JSON Schema 规范里，是可以用 [$ref](https://json-schema.org/understandin
 
 在 `$ref` 字段上可附加 `x-lineage-role` 注解，声明该引用在数据血缘语义上的角色。框架会在 Forma CRUD 写入时读取此注解，自动捕获记录间的血缘关系（详见 `lineage.md` 第 10 节）。
 
-**仅有此注解的 `$ref` 字段才触发血缘捕获**，无注解的 `$ref` 仅作为普通 FK，不生成血缘边。
+仅有此注解的 `$ref` 字段才触发血缘捕获，无注解的 `$ref` 只是普通 FK，不生成血缘边。
 
 取值语义参照 [W3C PROV-O](https://www.w3.org/TR/prov-o/) 标准谓词：
 

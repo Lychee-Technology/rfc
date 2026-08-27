@@ -22,26 +22,26 @@ Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two servic
 
 The single source of truth for the route surface is `handlerRouteTable()` in `ltbase.api/internal/authservice/routes.go`; both request dispatch and the published `routes-manifest.json` derive from it.
 
-## 2. Authentication, Scope, and Shared Conventions
+## 2. Authentication, scope, and shared conventions
 
-### 2.1 Trust Model
+### 2.1 Trust model
 
 The service does not validate the caller's credential itself. The API Gateway JWT authorizer validates the bearer token upstream and passes the verified claims to the Lambda; handlers read them from `RequestContext.Authorizer.JWT.Claims`.
 
-- For `login/{provider}` and `id_bindings/{provider}`, the authorizer token is the **upstream IdP token** (e.g. Firebase). Handlers consume its `sub`, `iss`, and other identity claims (`email`, `name`, `display_name`, ...).
-- For `auth/refresh`, the authorizer token is the **LTBase-issued refresh token** itself (see §5.4).
+- For `login/{provider}` and `id_bindings/{provider}`, the authorizer token is the upstream IdP token (e.g. Firebase). Handlers consume its `sub`, `iss`, and other identity claims (`email`, `name`, `display_name`, ...).
+- For `auth/refresh`, the authorizer token is the LTBase-issued refresh token itself (see §5.4).
 - For `auth/profile/{user_id}`, the authorizer token must carry a `project_id` claim (an LTBase access token qualifies).
 - `auth/health` is the only route without an authorizer.
 
-### 2.2 Project Scope
+### 2.2 Project scope
 
 The service runs in single-project scope: the deployment project is configured via `PROJECT_ID`.
 
-The **body-based project resolution** used by `login/{provider}`, `id_bindings/{provider}`, and `auth/revoke` resolves `project_id` as: request body → authorizer claim (login only) → configured default; any explicitly provided value must be a valid UUID and equal the configured default, otherwise the request is rejected (`invalid_project_id` / `invalid_project_scope`).
+The body-based project resolution used by `login/{provider}`, `id_bindings/{provider}`, and `auth/revoke` resolves `project_id` as: request body → authorizer claim (login only) → configured default; any explicitly provided value must be a valid UUID and equal the configured default, otherwise the request is rejected (`invalid_project_id` / `invalid_project_scope`).
 
-`auth/profile/{user_id}` and `auth/refresh` do **not** run that check: they use the `project_id` claim from the authorizer JWT directly (profile: `handler_profile.go`; refresh: `handler.go` / `service.go`). Because an LTBase-issued access or refresh token is already minted for the deployment project, the effective scope is the same in a single-project deployment — but the handlers trust the claim rather than re-comparing it to `PROJECT_ID`. See §5.4 and §5.6.
+`auth/profile/{user_id}` and `auth/refresh` do **not** run that check: they use the `project_id` claim from the authorizer JWT directly (profile: `handler_profile.go`; refresh: `handler.go` / `service.go`). Because an LTBase-issued access or refresh token is already minted for the deployment project, the effective scope is the same in a single-project deployment, but the handlers trust the claim rather than re-comparing it to `PROJECT_ID`. See §5.4 and §5.6.
 
-### 2.3 Request/Response Conventions
+### 2.3 Request/response conventions
 
 - All request bodies are JSON; all responses are JSON with `Content-Type: application/json`.
 - There is no envelope: success payloads are flat objects (no `request_id` wrapper, unlike the control-plane admin API).
@@ -54,9 +54,9 @@ The **body-based project resolution** used by `login/{provider}`, `id_bindings/{
 - Unknown routes return `404 {"error":"not_found"}`.
 - A recovered panic returns `500 {"error":"internal_error"}`.
 
-### 2.4 JWKS Publication
+### 2.4 JWKS publication
 
-The service's signing public keys are **not served by a route**. The former `GET /auth/jwks.json` route was removed and now returns `404 not_found`. The JWKS document is published as a static release artifact and hosted at the URL configured by `AUTH_JWKS_URL`; the service itself fetches that URL to verify its own previously-issued access tokens during refresh.
+The service's signing public keys are not served by a route. The former `GET /auth/jwks.json` route was removed and now returns `404 not_found`. The JWKS document is published as a static release artifact and hosted at the URL configured by `AUTH_JWKS_URL`; the service itself fetches that URL to verify its own previously-issued access tokens during refresh.
 
 The document is a standard JWKS with a top-level `keys` array (as emitted by `signer.go` `buildRSAJWKS` and required by the refresh-time verifier in `access_token_verify.go`):
 
@@ -68,7 +68,7 @@ The document is a standard JWKS with a top-level `keys` array (as emitted by `si
 }
 ```
 
-## 3. Route Summary
+## 3. Route summary
 
 The Authorizer column lists the API Gateway authorizer that fronts each route in the reference deployment (`ltbase-private-deployment/infra/internal/services/apigateway_routes.go` `buildAuthRouteSpecs`).
 
@@ -81,20 +81,20 @@ The Authorizer column lists the API Gateway authorizer that fronts each route in
 | POST | `/api/v1/auth/revoke` | `LTBase` (access JWT) | Revoke a refresh chain |
 | GET | `/api/v1/auth/profile/{user_id}` | `LTBase` (access JWT) | Project-scoped public profile lookup |
 
-The `{provider}` routes carry the `expand: provider` marker in the route manifest (`routemanifest.ExpandProvider`). The deployment expands them into concrete `POST /api/v1/login/<provider>` and `POST /api/v1/id_bindings/<provider>` routes **only for providers whose `EnableLogin` / `EnableIDBinding` flag is set** — a configured provider with the flag off gets no route. Each provider route is fronted by that provider's own IdP authorizer. The provider path value is lowercased and must be in the `AUTH_PROVIDERS` allowlist.
+The `{provider}` routes carry the `expand: provider` marker in the route manifest (`routemanifest.ExpandProvider`). The deployment expands them into concrete `POST /api/v1/login/<provider>` and `POST /api/v1/id_bindings/<provider>` routes only for providers whose `EnableLogin` / `EnableIDBinding` flag is set; a configured provider with the flag off gets no route. Each provider route is fronted by that provider's own IdP authorizer. The provider path value is lowercased and must be in the `AUTH_PROVIDERS` allowlist.
 
-## 4. Token Model
+## 4. Token model
 
 ### 4.1 Signing
 
 All tokens are RS256-signed JWTs. Two signer modes (`AUTH_SIGNER_MODE`):
 
-- **`kms`** (default): signs via AWS KMS (`RSASSA_PKCS1_V1_5_SHA_256`); requires an asymmetric RSA_2048/3072/4096 key. The JWT `kid` header is the KMS key ID.
-- **`file`**: signs with a local OpenSSH RSA private key (optionally passphrase-encrypted). The `kid` is resolved from `LTBASE_JWT_KID` → `AUTH_LOCAL_KEY_ID` → private-key filename stem → `local-file-key`.
+- `kms` (default): signs via AWS KMS (`RSASSA_PKCS1_V1_5_SHA_256`); requires an asymmetric RSA_2048/3072/4096 key. The JWT `kid` header is the KMS key ID.
+- `file`: signs with a local OpenSSH RSA private key (optionally passphrase-encrypted). The `kid` is resolved from `LTBASE_JWT_KID` → `AUTH_LOCAL_KEY_ID` → private-key filename stem → `local-file-key`.
 
 Historical note: the service originally signed with Ed25519 (EdDSA) and was migrated to RS256. The `cmd/authservice/ed25519/` key pair is a legacy artifact; there is no Ed25519 signing path in the current code. The active local-file key pair lives in `cmd/authservice/rsa256/`.
 
-### 4.2 Access Token Claims
+### 4.2 Access token claims
 
 Default TTL: 75 minutes (`AUTH_ACCESS_TTL`).
 
@@ -119,7 +119,7 @@ Default TTL: 75 minutes (`AUTH_ACCESS_TTL`).
 - `role_ids` is the user's role list after hierarchy expansion.
 - On refresh-minted access tokens, `auth_time` is carried over from the original session's issue time and `email` is empty.
 
-### 4.3 Refresh Token Claims
+### 4.3 Refresh token claims
 
 Default TTL: 672 hours / 28 days (`AUTH_REFRESH_TTL`).
 
@@ -138,15 +138,15 @@ Default TTL: 672 hours / 28 days (`AUTH_REFRESH_TTL`).
 }
 ```
 
-### 4.4 Rotation and Reuse Detection
+### 4.4 Rotation and reuse detection
 
 Every successful exchange or refresh persists a refresh session keyed by the refresh token's `jti`, linked to its parent via `parent_jti`. On refresh, the Lambda's session validation (`service.go`):
 
 - treats an expired refresh token as a chain-revoke with reason `expired` and returns `refresh_expired`;
 - returns `refresh_revoked` for a revoked session;
-- treats reuse of an already-rotated refresh token as a chain-revoke of the **entire chain** with reason `refresh_reuse` and returns `refresh_revoked`.
+- treats reuse of an already-rotated refresh token as a chain-revoke of the entire chain with reason `refresh_reuse` and returns `refresh_revoked`.
 
-Gateway interaction with the expiry check: because `auth/refresh` is fronted by the `LTBaseRefresh` JWT authorizer (which validates the refresh JWT's `exp`), an already-expired refresh token is rejected with `401` at the gateway before the Lambda runs. The Lambda's own `refresh_expired` path is therefore defense-in-depth (e.g. direct invocation or an authorizer that does not enforce `exp`) rather than the path a gateway-fronted client normally hits — see §5.4.
+Gateway interaction with the expiry check: because `auth/refresh` is fronted by the `LTBaseRefresh` JWT authorizer (which validates the refresh JWT's `exp`), an already-expired refresh token is rejected with `401` at the gateway before the Lambda runs. The Lambda's own `refresh_expired` path is therefore defense-in-depth (e.g. direct invocation or an authorizer that does not enforce `exp`) rather than the path a gateway-fronted client normally hits. See §5.4.
 
 Successful exchange, refresh, revoke, and binding operations each write an audit entry (`action`: `exchange` / `refresh` / `revoke` / `id_binding`).
 
@@ -218,14 +218,14 @@ Request body (required):
 }
 ```
 
-Response (`200 OK`): same shape as login — `access_token`, `refresh_token`, `api_base_url`.
+Response (`200 OK`): same shape as login (`access_token`, `refresh_token`, `api_base_url`).
 
 Binding policies: enabled policies are loaded per project; when none exist, the built-in fallback policy `referral.default` applies, requiring `referral_valid == true`. Rules have the shape `{l, c, a, v}` (left operand, comparator, action, value) evaluated over the context fields `project_id, provider, issuer, sub, email, code, referral_exists, referral_used, referral_valid`. Comparators: `eq, ne, exists, not_exists, truthy, falsy, contains, prefix, in, not_in`; actions: `must` (also `require`/`allow_if`) and `deny_if` (also `deny`). `REFERRAL_REQUIRED=true` appends the default referral rule when no stored policy has one.
 
 Enforcement gating (`handler_binding.go`):
 
-- `AUTH_BINDING_POLICY_ALLOWLIST` — enforce policies only for the listed projects (empty = all).
-- `AUTH_BINDING_POLICY_SHADOW_MODE` — suppresses the **policy-engine deny branch**: a `decision.Allowed == false` is audited but does not raise `ErrPolicyDenied`. It does **not** make binding "never deny." The write path still derives `RequireReferral` from the active policies (including the fallback `referral.default`), and when a referral is required the repository consumes/validates it during the bind transaction; an invalid or already-used referral still fails and surfaces as `409 invalid_code`. In other words, shadow mode relaxes explicit policy `deny_if` outcomes, not the referral-consumption requirement.
+- `AUTH_BINDING_POLICY_ALLOWLIST`: enforce policies only for the listed projects (empty = all).
+- `AUTH_BINDING_POLICY_SHADOW_MODE`: suppresses the policy-engine deny branch, so a `decision.Allowed == false` is audited but does not raise `ErrPolicyDenied`. It does **not** make binding "never deny." The write path still derives `RequireReferral` from the active policies (including the fallback `referral.default`), and when a referral is required the repository consumes/validates it during the bind transaction; an invalid or already-used referral still fails and surfaces as `409 invalid_code`. Shadow mode relaxes explicit policy `deny_if` outcomes; it does not remove the referral-consumption requirement.
 
 If the identity is already bound to a user, the binding call resolves the existing user, refreshes its referral-code record, and still returns a token pair (idempotent re-bind); `identity_bound` is only returned when the existing user cannot be resolved consistently.
 
@@ -247,7 +247,7 @@ Errors:
 
 Purpose: rotate a refresh token into a new access/refresh pair.
 
-Authorizer: the **LTBase refresh token** is presented as the gateway bearer token. Claims consumed: `iss, aud, sub, project_id, api_base_url, iat, exp, jti, session_id`; `project_id`, `jti`, and `exp` are mandatory (otherwise `refresh_invalid`).
+Authorizer: the LTBase refresh token is presented as the gateway bearer token. Claims consumed: `iss, aud, sub, project_id, api_base_url, iat, exp, jti, session_id`; `project_id`, `jti`, and `exp` are mandatory (otherwise `refresh_invalid`).
 
 Request body (required):
 
@@ -255,7 +255,7 @@ Request body (required):
 { "access_token": "<current access jwt>" }
 ```
 
-The provided `access_token` is verified against the JWKS at `AUTH_JWKS_URL` (`access_token_verify.go`), but the verification is intentionally narrow: it checks only the RS256 signature (key selected by `kid`), that `token_use` is `access`, and that `iss` equals the configured issuer. Standard claim validation is disabled — expiry (`exp`), `aud`, `sub`, `project_id`, and `jti` are **not** validated, and the token is not bound to the refresh token's subject/project. Skipping `exp` is deliberate (refreshing after the access token has expired is the normal case); the other omissions mean this check proves only that *an* access token from this issuer is presented, not that it belongs to the same session. Failure → `401 access_invalid`.
+The provided `access_token` is verified against the JWKS at `AUTH_JWKS_URL` (`access_token_verify.go`), but the verification is intentionally narrow: it checks only the RS256 signature (key selected by `kid`), that `token_use` is `access`, and that `iss` equals the configured issuer. Standard claim validation is disabled: expiry (`exp`), `aud`, `sub`, `project_id`, and `jti` are not validated, and the token is not bound to the refresh token's subject/project. Skipping `exp` is deliberate (refreshing after the access token has expired is the normal case); the other omissions mean this check proves only that *an* access token from this issuer is presented, not that it belongs to the same session. Failure → `401 access_invalid`.
 
 Gateway note: an expired *refresh* token is rejected with `401` by the `LTBaseRefresh` authorizer before this handler runs, so the `refresh_expired` row below is not normally reachable through the deployed gateway (see §4.4).
 
@@ -319,7 +319,7 @@ Errors:
 
 Purpose: public profile lookup, scoped to the caller's project. Any authenticated caller in the project can read same-project public profiles.
 
-Authorizer: `LTBase` (access JWT). Claim consumed: `project_id` (required → otherwise `401 auth_required`). The lookup uses this claim's `project_id` **directly** as the query scope; it is not compared against `PROJECT_ID` (see §2.2).
+Authorizer: `LTBase` (access JWT). Claim consumed: `project_id` (required → otherwise `401 auth_required`). The lookup uses this claim's `project_id` directly as the query scope; it is not compared against `PROJECT_ID` (see §2.2).
 
 Request: no request body. Path parameter: `{user_id}`.
 
@@ -349,7 +349,7 @@ Errors:
 | 404 | `user_not_found` | no such user in the project |
 | 500 | `profile_lookup_failed` | downstream failure |
 
-## 6. Configuration Appendix
+## 6. Configuration appendix
 
 Contract-relevant environment variables (`internal/authservice/config.go`, loaded in `cmd/authservice` wiring):
 
@@ -377,9 +377,9 @@ Contract-relevant environment variables (`internal/authservice/config.go`, loade
 
 Store backend selection (`cmd/authservice/config.go`): `AUTH_STORE_BACKEND` (`dynamodb`, the default, or `postgres`; falls back to `CONTROLPLANE_STORE_BACKEND`). DynamoDB table name resolves `AUTH_IDENTITY_TABLE_NAME` → `DYNAMODB_TABLE_NAME` → `LTBASE_TABLE_NAME` (deprecated); Postgres schema resolves `CONTROLPLANE_PROJECT_SCHEMA` → `DSQL_PROJECT_SCHEMA` → `ltbase`.
 
-## 7. Related Documents
+## 7. Related documents
 
-- `aaa.md` — the canonical AAA model: identity model, deterministic user IDs, login/binding sequences, JWT design.
-- `API-specs-control-plane-service-auth-routes.en.md` — the control-plane admin surface sharing the `/api/v1/auth/*` namespace (users/roles/policies/binding policies/referrals CRUD).
-- `API-specs-data-plane.en.md` — the data-plane API that consumes the access tokens issued here.
-- `IdentityArchitecture.md` — design background only; its `/oauth/token` and `/oauth/revoke` endpoints are aspirational and do not match the implemented routes in this document.
+- `aaa.md`: the canonical AAA model, covering the identity model, deterministic user IDs, login/binding sequences, and JWT design.
+- `API-specs-control-plane-service-auth-routes.en.md`: the control-plane admin surface sharing the `/api/v1/auth/*` namespace (users/roles/policies/binding policies/referrals CRUD).
+- `API-specs-data-plane.en.md`: the data-plane API that consumes the access tokens issued here.
+- `IdentityArchitecture.md`: design background only; its `/oauth/token` and `/oauth/revoke` endpoints are aspirational and do not match the implemented routes in this document.

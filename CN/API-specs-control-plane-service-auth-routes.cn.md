@@ -1,6 +1,6 @@
 # LTBase API 规格：Auth Service
 
-本文档描述独立 control-plane gateway/domain 下 `/api/v1/auth/...` 的已实现管理 REST API 合约。
+本文档描述独立的 control-plane gateway/domain 下 `/api/v1/auth/...` 已实现的管理 REST API 合约。
 
 - 代码基线：
   - `ltbase.api/cmd/controlplane`
@@ -175,7 +175,7 @@ contract），调用方可在请求路径参数中通过 `slug` 引用实体（�
 id）。slug 解析适用于 role、policy 与 binding policy 的路径参数；`user_id` 只按精确值
 匹配。`ou_id` 和 `user_id` 由调用方/身份提供，并非服务端生成。
 
-标识符规范化的边界：**存储记录与完整资源对象响应**（`data.user` / `data.role` /
+标识符规范化的边界：存储记录与完整资源对象响应（`data.user` / `data.role` /
 `data.policy` / `data.binding_policy` 及集合条目）始终携带 UUIDv7。但 attach / detach /
 delete 返回的 `status` 小对象会**原样回显路径参数中提供的标识**——调用方传 slug 时，
 响应中的 `role_id` / `policy_id` / `principal_id` 就是该 slug，不会规范化为 UUID（涉及

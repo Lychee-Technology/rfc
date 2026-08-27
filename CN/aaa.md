@@ -1,6 +1,6 @@
-# **LTBase AAA 系统技术规范**
+# LTBase AAA 系统技术规范
 
-本文定义 **LTBase** 的完整 AAA（Authentication / Authorization / Accounting，认证 / 授权 / 审计）架构，面向社交登录场景与企业级访问控制场景。
+本文定义 LTBase 的 AAA（Authentication / Authorization / Accounting，认证 / 授权 / 审计）架构，面向社交登录场景与企业访问控制场景。
 
 该架构显式拆分三个关注点：
 
@@ -14,7 +14,7 @@
 
 ---
 
-## **1. 系统概览**
+## 1. 系统概览
 
 LTBase AAA 系统提供：
 
@@ -24,13 +24,13 @@ LTBase AAA 系统提供：
 * **Audit Trails**：记录完整访问审计日志
 * **AI Safety**：策略模型可安全供 AI Agent 与工具使用
 
-授权引擎同时集成 **EntityMain + EAV 业务数据模型** 与现有 **LTBase query rule syntax**，以支持可表达的条件逻辑。
+授权引擎同时集成 EntityMain + EAV 业务数据模型与现有 LTBase query rule syntax，以支持表达条件逻辑。
 
 ---
 
-## **2. Authentication - Login Service（登录服务）**
+## 2. Authentication - Login Service（登录服务）
 
-### **2.1 目标**
+### 2.1 目标
 
 认证层负责：
 
@@ -41,7 +41,7 @@ LTBase AAA 系统提供：
 > [!IMPORTANT]
 > Authentication 本身 **不授予** 对 LTBase 资源的访问权限。只有存在有效 Identity Binding 才可以访问。
 
-### **2.2 外部身份模型**
+### 2.2 外部身份模型
 
 当前实现通过一个项目级外部身份查找记录加上确定性回退逻辑来解析外部身份：
 
@@ -60,11 +60,11 @@ Authservice 会先读取目标项目范围内的外部身份查找记录。
 
 当前路径里，用户档案仍然是绑定状态的事实来源。
 
-### **2.3 API 定义**
+### 2.3 API 定义
 
-登录服务作为独立微服务运行，提供以下接口：
+登录服务是独立微服务，提供以下接口：
 
-#### **POST /api/v1/login/{provider}**
+#### POST /api/v1/login/{provider}
 
 把第三方身份令牌交换为 LTBase 会话令牌。
 
@@ -119,7 +119,7 @@ Authservice 会先读取目标项目范围内的外部身份查找记录。
 | 500 | `permission_list_failed` | 加载有效角色对应权限失败 |
 | 500 | `exchange_failed` | 访问 / 刷新令牌签发失败 |
 
-#### **POST /api/v1/id_bindings/{provider}**
+#### POST /api/v1/id_bindings/{provider}
 
 为 LTBase 用户绑定第三方身份令牌。
 
@@ -168,7 +168,7 @@ Authservice 会先读取目标项目范围内的外部身份查找记录。
 | 409 | `invalid_code` | 邀请码无效、已过期或已使用 |
 | 500 | `id_binding_failed` | 绑定事务或令牌签发失败 |
 
-### **2.4 JWT 设计**
+### 2.4 JWT 设计
 
 LTBase JWT：
 
@@ -190,9 +190,9 @@ LTBase JWT：
 
 ---
 
-## **3. Identity Binding Layer（身份绑定层）**
+## 3. Identity Binding Layer（身份绑定层）
 
-### **3.1 动机**
+### 3.1 动机
 
 在企业环境中：
 
@@ -200,11 +200,11 @@ LTBase JWT：
 * 访问可能依赖邀请码、邮箱域名、审批流程或外部系统
 * 一个外部身份可能需要访问多个项目
 
-因此 LTBase 在认证与授权之间引入显式的 **Identity Binding** 层。
+因此 LTBase 在认证与授权之间引入显式的 Identity Binding 层。
 
-### **3.2 内部用户（授权主体）**
+### 3.2 内部用户（授权主体）
 
-内部 LTBase 用户是 **授权策略唯一使用的主体**。
+内部 LTBase 用户是授权策略唯一使用的主体。
 
 用户档案作为 control-plane auth store 中的一类记录保存：
 
@@ -212,9 +212,9 @@ LTBase JWT：
 | --- | --- | --- |
 | User Profile | `project_id + user_id` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims`, `primary_ou_id`, `report_to_user_id` |
 
-### **3.3 身份绑定模型**
+### 3.3 身份绑定模型
 
-LTBase authservice 使用 **逻辑记录式 binding model**，而不是单独的 `identity_binding` 表：
+LTBase authservice 使用逻辑记录式 binding model，而不是单独的 `identity_binding` 表：
 
 | 绑定状态 | Auth Store 表示 |
 | --- | --- |
@@ -230,7 +230,7 @@ LTBase authservice 使用 **逻辑记录式 binding model**，而不是单独的
 | 确定性绑定状态 | 通过确定性用户键解析绑定状态 |
 | 生命周期控制 | 通过记录存在性与条件写控制绑定生命周期 |
 
-### **3.4 登录与绑定流程**
+### 3.4 登录与绑定流程
 
 ```mermaid
 sequenceDiagram
@@ -269,7 +269,7 @@ sequenceDiagram
 6. 如果未绑定，返回 `identity_unbound`
 7. 客户端使用 referral code 调用 bind 接口，原子化建立绑定
 
-### **3.5 绑定策略模型**
+### 3.5 绑定策略模型
 
 绑定策略复用 LTBase rule syntax，并在 bind-time 评估：
 
@@ -312,58 +312,58 @@ sequenceDiagram
 
 ---
 
-## **4. Authorization Goals（授权目标）**
+## 4. Authorization Goals（授权目标）
 
 授权引擎必须保证：
 
-* 用户只能看到有权查看的行（**row-level restriction**）
-* 用户只能看到有权访问的列/属性（**column/attribute-level**）
-* 策略解析或计算失败时必须 **fail-closed**
+* 用户只能看到有权查看的行（row-level restriction）
+* 用户只能看到有权访问的列/属性（column/attribute-level）
+* 策略解析或计算失败时必须 fail-closed
 * 策略 statement 可引用 EAV 中的动态实体属性以及 `${requester.*}` 上下文
 * 规则必须是安全、结构化的，不能允许代码注入
 
 > [!IMPORTANT]
 > **行访问 ≠ 列可见性**，二者是不同的数据治理控制层。
 
-### **4.1 统一策略模型**
+### 4.1 统一策略模型
 
-所有授权都通过一个概念表达 —— `policy_profile`，其内部承载一个或多个 `statement`。每个 statement 包含：
+所有授权都通过一个概念表达：`policy_profile`，其内部承载一个或多个 `statement`。每个 statement 包含：
 
-* `effect` —— `allow` / `deny` / `mask`
-* `ops` —— 操作集合（`create` / `read` / `update` / `delete`，或 `*` 表示全部）
-* `schema` —— 实体范围
-* `selector` —— 行范围（`resource_id` 列表、`filter`，或二者并集）
-* `outcome` —— 可选的列级注解（哪些属性、做什么动作）
-* `condition` —— 可选 `l/c/a/v` 谓词，针对实体属性与 `${requester.*}` 上下文求值
+* `effect`：`allow` / `deny` / `mask`
+* `ops`：操作集合（`create` / `read` / `update` / `delete`，或 `*` 表示全部）
+* `schema`：实体范围
+* `selector`：行范围（`resource_id` 列表、`filter`，或二者并集）
+* `outcome`：可选的列级注解（哪些属性、做什么动作）
+* `condition`：可选 `l/c/a/v` 谓词，针对实体属性与 `${requester.*}` 上下文求值
 
-Policy 可以附加到主体（`user`、`role`）和 `OU` 容器上;OU 上的附加沿 OU 子树继承（见 5.7.2）。同一个 evaluator 处理这三种附加面,并采用 **deny-overrides** 与 **mask-overrides-allow** 优先级（见 9.6）。
+Policy 可以附加到主体（`user`、`role`）和 `OU` 容器上；OU 上的附加沿 OU 子树继承（见 5.7.2）。同一个 evaluator 处理这三种附加面，并采用 deny-overrides 与 mask-overrides-allow 优先级（见 9.6）。
 
 > [!NOTE]
-> 早期草案中并存的三套机制 —— `resource_grant`、`permission_profile`、`policy_profile` —— 已合并为统一 statement 模型。`resource_grant` 仅作为**物理投影**保留（见 4.2），不再是独立的逻辑概念。
+> 早期草案中并存的三套机制（`resource_grant`、`permission_profile`、`policy_profile`）已合并为统一 statement 模型。`resource_grant` 仅作为物理投影保留（见 4.2），不再是独立的逻辑概念。
 >
 > 每个 legacy 术语的规范化定义、完整迁移映射、JWT `permissions` claim 兼容约定，见 `policy-permission-relationship.md`。
 
-### **4.2 物理优化**
+### 4.2 物理优化
 
-Auth store 可对单 statement 策略维护去规范化的投影（例如保留原 `resource_grant` 风格的索引，用于 `resource_id` / `filter` 热路径查找）作为运行时优化。这些投影是统一策略模型的**缓存**,必须与完整 statement 集合的求值结果一致。
+Auth store 可对单 statement 策略维护去规范化的投影（例如保留原 `resource_grant` 风格的索引，用于 `resource_id` / `filter` 热路径查找）作为运行时优化。这些投影是统一策略模型的缓存，必须与完整 statement 集合的求值结果一致。
 
 ---
 
-## **5. AAA 数据模型**
+## 5. AAA 数据模型
 
-### **5.1 业务实体 - EntityMain + EAV**
+### 5.1 业务实体 - EntityMain + EAV
 
-业务实体采用 **DSQL** 数据模型：
+业务实体采用 DSQL 数据模型：
 
-* **主表（`entity_main_<project_id>`）**：
+* 主表（`entity_main_<project_id>`）：
   存储高频固定列，例如 `{ ltbase_schema_id, ltbase_row_id, ltbase_created_at, ltbase_updated_at, text_01...10, ... }`
 
-* **EAV 数据表（`eav_data_<project_id>`）**：
+* EAV 数据表（`eav_data_<project_id>`）：
   存储动态属性以及对应类型值列，例如 `{ schema_id, row_id, attr_id, value_text, value_numeric, ... }`
 
 这要求授权条件针对 `eav_data` 中的属性求值，而不是仅依赖静态列。
 
-### **5.2 授权实体**
+### 5.2 授权实体
 
 | 记录族 | 用途 |
 | --- | --- |
@@ -384,33 +384,33 @@ Auth store 可对单 statement 策略维护去规范化的投影（例如保留�
 | `referral profile` | 邀请码 / referral 校验与消费状态 |
 | `audit event` | 审计事件 |
 
-Policy 仍然是结构化对象,而不是 EAV 记录。项目级客户端调用走 control-plane authz API;无法通过 data-plane EAV 路径直接修改策略文档。
+Policy 仍然是结构化对象，而不是 EAV 记录。项目级客户端调用走 control-plane authz API；无法通过 data-plane EAV 路径直接修改策略文档。
 
-### **5.3 实体关系**
+### 5.3 实体关系
 
-该系统采用标准 **RBAC（Role-Based Access Control）**，并支持层级组关系；同时用 **类 Active Directory 的组织层级** 来表达组织结构：
+该系统采用标准 RBAC（Role-Based Access Control），并支持层级组关系；同时用类 Active Directory 的组织层级来表达组织结构：
 
-* **User**：内部身份主体
-* **Role / Group**：一组策略附加,以及角色继承图中的一个节点
+* User：内部身份主体
+* Role / Group：一组策略附加，以及角色继承图中的一个节点
   * Group 在语义上等价于 Role
-  * **继承**：Role 可继承其他 Role（例如 `Manager` 继承 `Employee`）
+  * 继承：Role 可继承其他 Role（例如 `Manager` 继承 `Employee`）
   * Role 是唯一支持跨切面 / 矩阵关系的机制（一个用户可持有多个角色）
-* **Policy**：包含一条或多条 `statement` 的命名容器。statement 携带 `effect`（allow / deny / mask）、`ops`、`schema`、可选的 `selector` 与 `outcome`,以及可选的 `condition`（见 §6）
-* **OU（Organizational Unit）**：反映汇报与归属结构的层级容器
+* Policy：包含一条或多条 `statement` 的命名容器。statement 携带 `effect`（allow / deny / mask）、`ops`、`schema`、可选的 `selector` 与 `outcome`，以及可选的 `condition`（见 §6）
+* OU（Organizational Unit）：反映汇报与归属结构的层级容器
   * 每个用户恰好属于一个 `primary_ou_id`
   * OU 通过 `parent_ou_id` 与 materialized `ou_path` 组成树
   * **OU 不是 ACL principal**。它通过挂接 `policy_profile` 间接携带授权
-* **Manager**：用户档案上的单值 `report_to_user_id`，并通过 direct-report 反向索引支持"谁向谁汇报"查询
+* Manager：用户档案上的单值 `report_to_user_id`，并通过 direct-report 反向索引支持“谁向谁汇报”查询
 
-**关系流：**
+关系流：
 
-1. **External Identity** 被规范化成确定性内部 `user_id`，再映射为 **User Profile**
-2. **Users** 通过 `user role` 记录获得 **Roles**，并通过 `primary_ou_id` 进入一个 **OU**
-3. **Policy** 可以附加到 **User**、**Role** 或 **OU**,通过对应的 attachment 记录
-4. **OU 上的策略附加** 沿 `ou_path` 向 OU 子树继承
-5. **Authorization** 综合用户直接附加、角色（含继承）附加、OU 祖先附加的全部策略,并按 §9.6 的优先级合并 statement
+1. External Identity 被规范化成确定性内部 `user_id`，再映射为 User Profile
+2. Users 通过 `user role` 记录获得 Roles，并通过 `primary_ou_id` 进入一个 OU
+3. Policy 可以附加到 User、Role 或 OU，通过对应的 attachment 记录
+4. OU 上的策略附加沿 `ou_path` 向 OU 子树继承
+5. Authorization 综合用户直接附加、角色（含继承）附加、OU 祖先附加的全部策略，并按 §9.6 的优先级合并 statement
 
-### **5.4 逻辑 Auth Store 记录定义**
+### 5.4 逻辑 Auth Store 记录定义
 
 AAA 设计依赖一个逻辑 auth store contract，而不是具体物理后端。下面每种记录族都必须能按项目范围访问，并在所有受支持后端中高效满足对应访问模式。后端映射定义见 `aaa-control-plane-store-mapping.md`。
 
@@ -433,9 +433,9 @@ AAA 设计依赖一个逻辑 auth store contract，而不是具体物理后端�
 | Session edge | 按 `project_id + parent_jti` 列表 | 撤销链遍历 |
 | Audit event | 追加写入 `project_id + event_time` | 时间有序安全日志 |
 
-### **5.5 项目隔离策略（不依赖 SQL Views）**
+### 5.5 项目隔离策略（不依赖 SQL Views）
 
-项目隔离通过 **项目级记录归属** 实现，而不是 SQL views：
+项目隔离通过项目级记录归属实现，而不是 SQL views：
 
 | 隔离控制 | 说明 |
 | --- | --- |
@@ -446,7 +446,7 @@ AAA 设计依赖一个逻辑 auth store contract，而不是具体物理后端�
 
 该设计避免动态 SQL view provisioning，并使 control-plane storage contract 可以跨后端移植。
 
-### **5.6 标识规范化与编码规则**
+### 5.6 标识规范化与编码规则
 
 为避免碰撞与跨语言不一致，所有标识在持久化或查找前都必须做确定性规范化：
 
@@ -466,7 +466,7 @@ AAA 设计依赖一个逻辑 auth store contract，而不是具体物理后端�
 * 如果底层后端需要额外编码，必须保证确定性，必要时可逆
 * 任一规范化结果为空或非法，必须在 repository 边界快速失败
 
-### **5.7 组织结构（Org Chart）**
+### 5.7 组织结构（Org Chart）
 
 LTBase 用两条彼此独立的关系来表达组织结构：
 
@@ -476,12 +476,12 @@ LTBase 用两条彼此独立的关系来表达组织结构：
 | Reporting line | `User.report_to_user_id` -> `User.user_id` | 单值 | 表示用户向谁汇报，并为规则提供 manager-chain 上下文 |
 
 > [!IMPORTANT]
-> 归属与汇报是 **两条独立轴线**。用户的 manager 不需要与其位于同一 OU。
+> 归属与汇报是两条独立轴线。用户的 manager 不需要与其位于同一 OU。
 
 > [!NOTE]
-> “org chart”是概念；数据模型是 **org units**（`org_units` / OU）。org units 及其他内置资源的 REST/JSON/action 命名见 `API-specs-control-plane.cn.md` §3.4（内置资源）。
+> “org chart”是概念；数据模型是 org units（`org_units` / OU）。org units 及其他内置资源的 REST/JSON/action 命名见 `API-specs-control-plane.cn.md` §3.4（内置资源）。
 
-#### **5.7.1 OU 树与 Materialized Path**
+#### 5.7.1 OU 树与 Materialized Path
 
 OU 树同时保存直接父指针 `parent_ou_id` 与 materialized `ou_path`，以支持高效子树查询：
 
@@ -498,16 +498,16 @@ ou:team_android   parent_ou_id = ou_mobiledev ou_path = "/{ou_rnd}/{ou_mobiledev
 * 移动 OU（修改 `parent_ou_id`）时需要重写整棵子树的 `ou_path` 与 `ou_user` 反向索引，可视为后台管理操作
 * 每个用户恰好一个 `primary_ou_id`；跨 OU / 矩阵关系应通过 Role 表达
 
-#### **5.7.2 OU 策略继承（GPO 风格）**
+#### 5.7.2 OU 策略继承（GPO 风格）
 
-授权只能通过 `policy_profile` 记录附着到 OU 上，具体载体为 **OU policy attachment**，逻辑标识为 `project_id + ou_id + policy_id`。
+授权只能通过 `policy_profile` 记录附着到 OU 上，具体载体为 OU policy attachment，逻辑标识为 `project_id + ou_id + policy_id`。
 
 登录时，授权引擎沿用户 `primary_ou.ou_path` 从根到叶收集所有附着策略，并合并成 effective policy set。这一行为与 AD 的 GPO 继承模型一致。
 
 > [!NOTE]
 > OU 不是 `resource_grant` 或 `principal_policy_attachment` 的合法 principal。要做 OU 范围授权，应创建并挂接 `policy_profile`。
 
-##### **继承修饰符（预留，v1 不启用）**
+##### 继承修饰符（预留，v1 不启用）
 
 Schema 预留两个与 AD 对应的标志。它们可以存储，但 v1 evaluator 忽略：
 
@@ -516,15 +516,15 @@ Schema 预留两个与 AD 对应的标志。它们可以存储，但 v1 evaluato
 | `block_inheritance` | OU profile | Block Inheritance | 为 true 时阻止子 OU 继承祖先策略 |
 | `enforced` | OU policy attachment | Enforced / No Override | 为 true 时策略可穿透 `block_inheritance` 继续向下传播 |
 
-#### **5.7.3 Manager 关系**
+#### 5.7.3 Manager 关系
 
 用户档案上的 `report_to_user_id` 是单值字段，指向其直属 manager。系统同时维护 direct-report 反向查找结构，以支持按 manager 快速列出直属下属。
 
-* **仅允许单值。** 虚线汇报 / 次级 manager 不进入 schema；应通过额外 Role 表达
-* **禁止环。** 写入时必须阻止用户直接或间接向自己汇报
-* **链深受限。** 登录阶段展开 manager chain 时默认限制深度（例如 <= 10）
+* 仅允许单值。虚线汇报 / 次级 manager 不进入 schema；应通过额外 Role 表达
+* 禁止环。写入时必须阻止用户直接或间接向自己汇报
+* 链深受限。登录阶段展开 manager chain 时默认限制深度（例如 <= 10）
 
-#### **5.7.4 从组织结构派生的上下文**
+#### 5.7.4 从组织结构派生的上下文
 
 以下派生值在登录时（或策略刷新时）计算，并供规则求值使用：
 
@@ -540,11 +540,11 @@ Schema 预留两个与 AD 对应的标志。它们可以存储，但 v1 evaluato
 
 ---
 
-## **6. Policy 与 Statement 语法**
+## 6. Policy 与 Statement 语法
 
-LTBase 把所有授权决策表达为一个 **policy**，其中包含一条或多条 **statement**。statement 是求值的最小单位。
+LTBase 把所有授权决策表达为一个 policy，其中包含一条或多条 statement。statement 是求值的最小单位。
 
-### **6.1 Policy 文档形态**
+### 6.1 Policy 文档形态
 
 ```json
 {
@@ -556,7 +556,7 @@ LTBase 把所有授权决策表达为一个 **policy**，其中包含一条或�
 
 同一个 policy 可以混合不同的 effect（allow / deny / mask）。跨 statement、跨 policy 的合并规则定义在 §9.6。
 
-### **6.2 Statement Schema**
+### 6.2 Statement Schema
 
 | 字段 | 必填 | 类型 | 说明 |
 | --- | --- | --- | --- |
@@ -567,9 +567,9 @@ LTBase 把所有授权决策表达为一个 **policy**，其中包含一条或�
 | `outcome` | `mask` 必填;`allow` 可选 | object | 列级注解（见 6.5） |
 | `condition` | 可选 | object | 额外的 `l/c/a/v` 谓词（见 6.3） |
 
-### **6.3 Condition 语法（`l/c/a/v`）**
+### 6.3 Condition 语法（`l/c/a/v`）
 
-Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requester.*}` 上下文（见 §9.4）：
+Condition 复用 LTBase query-rule 格式，可同时引用实体属性与 `${requester.*}` 上下文（见 §9.4）：
 
 ```json
 {
@@ -594,11 +594,11 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 | `a` | 属性名（实体属性或 `requester.*` 上下文） |
 | `v` | 带操作符前缀的值表达式 |
 
-支持嵌套 `l/c`,同一份语法同时服务于行级范围和列级谓词。
+支持嵌套 `l/c`，同一份语法同时服务于行级范围和列级谓词。
 
-### **6.4 Selector 语法**
+### 6.4 Selector 语法
 
-`selector` 把 statement 限定到 `schema` 中的部分行。两种形态,可叠加(并集)：
+`selector` 把 statement 限定到 `schema` 中的部分行。两种形态，可叠加（并集）：
 
 ```json
 {
@@ -615,12 +615,12 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 }
 ```
 
-`filter` 中每个 key 是属性名;每个 value 是 data-plane filter parser 支持的带操作符表达式。
+`filter` 中每个 key 是属性名；每个 value 是 data-plane filter parser 支持的带操作符表达式。
 
 > [!NOTE]
-> 持久化记录内部可能将 selector 暴露为 `filter_json` / `filter_hash` 以便建索引。客户端**提交**时使用上述结构形态;持久化 hash 是实现细节,**不应**出现在 `create-iam-authz-records` 请求中。
+> 持久化记录内部可能将 selector 暴露为 `filter_json` / `filter_hash` 以便建索引。客户端提交时使用上述结构形态；持久化 hash 是实现细节，不应出现在 `create-iam-authz-records` 请求中。
 
-### **6.5 Outcome Schema(列级)**
+### 6.5 Outcome Schema(列级)
 
 ```json
 {
@@ -630,13 +630,13 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 }
 ```
 
-* 当 `effect=allow` 且未指定 `outcome` 时,statement 允许对应 `ops` 下的**整行**(所有属性可读 / 可写)
-* 当 `effect=mask` 时,必须给出 `outcome.attrs` 与 `outcome.action=mask`。无论是否有匹配的 `allow`,`mask` 都对所列属性生效(见 §9.6)
-* `outcome.scope=row` 是隐含默认值,无需显式书写
+* 当 `effect=allow` 且未指定 `outcome` 时，statement 允许对应 `ops` 下的整行（所有属性可读 / 可写）
+* 当 `effect=mask` 时，必须给出 `outcome.attrs` 与 `outcome.action=mask`。无论是否有匹配的 `allow`，`mask` 都对所列属性生效（见 §9.6）
+* `outcome.scope=row` 是隐含默认值，无需显式书写
 
-### **6.6 完整示例**
+### 6.6 完整示例
 
-> "MobileDev OU 的用户可读取其 OU 子树范围内所有工单;manager 还能看到其直属下属的联系方式;`ssn` 在读取时始终被掩码。"
+> “MobileDev OU 的用户可读取其 OU 子树范围内所有工单；manager 还能看到其直属下属的联系方式；`ssn` 在读取时始终被掩码。”
 
 ```json
 {
@@ -666,13 +666,13 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 }
 ```
 
-把该 policy 通过 `ou_policy_attachment` 挂到 OU `MobileDev` 上,即可对该子树内所有用户生效。
+把该 policy 通过 `ou_policy_attachment` 挂到 OU `MobileDev` 上，即可对该子树内所有用户生效。
 
 ---
 
-## **7. 行级访问控制**
+## 7. 行级访问控制
 
-行级 statement 决定某个实体（row）是否可见或可操作。行范围通过 `selector`（`resource_id` 列表和/或 `filter`）表达,可选地再用 `condition` 收窄。
+行级 statement 决定某个实体（row）是否可见或可操作。行范围通过 `selector`（`resource_id` 列表和/或 `filter`）表达，可选地再用 `condition` 收窄。
 
 **示例：用户只能读取自己拥有的行**
 
@@ -685,18 +685,18 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 }
 ```
 
-运行时,list / read 操作会把所有 allow statement 的 selector 并集下推为 data-plane 查询谓词,再去读取业务数据;命中的 deny statement 的 selector 作为负向谓词加入。
+运行时，list / read 操作会把所有 allow statement 的 selector 并集下推为 data-plane 查询谓词，再去读取业务数据；命中的 deny statement 的 selector 作为负向谓词加入。
 
 ---
 
-## **8. 列 / 属性级访问控制**
+## 8. 列 / 属性级访问控制
 
 列级决策通过 statement 上的 `outcome.scope=column` 表达。`effect` 决定该属性上的行为：
 
-* `effect=allow` + `outcome.scope=column` —— 把可见范围扩展到所列属性
-* `effect=mask` + `outcome.scope=column` —— 无论是否有匹配的 `allow`,都对所列属性做掩码 / 替换(mask 在属性级覆盖 allow,见 §9.6)
+* `effect=allow` + `outcome.scope=column`：把可见范围扩展到所列属性
+* `effect=mask` + `outcome.scope=column`：无论是否有匹配的 `allow`，都对所列属性做掩码 / 替换（mask 在属性级覆盖 allow，见 §9.6）
 
-主体范围(哪些用户获得该行为)由**策略附加在哪个主体上**决定,而不是在 condition 里手写 role 检查。表达"manager 可读 email"的标准做法是:
+主体范围（哪些用户获得该行为）由策略附加在哪个主体上决定，而不是在 condition 里手写 role 检查。表达“manager 可读 email”的标准做法是：
 
 ```json
 // 该策略只附加在 role `Manager` 上
@@ -720,17 +720,17 @@ Condition 复用 LTBase query-rule 格式,可同时引用实体属性与 `${requ
 ```
 
 > [!NOTE]
-> 当前实现基线仍主要覆盖行级范围控制。列级 statement（`outcome.scope=column`）属于集成设计的一部分,会逐步落地。
+> 当前实现基线仍主要覆盖行级范围控制。列级 statement（`outcome.scope=column`）属于集成设计的一部分，会逐步落地。
 
-### **数据脱敏（可选）**
+### 数据脱敏（可选）
 
-对敏感属性(如 SSN),`effect=mask` 在读取时把存储值替换为掩码模式(如 `*****`),而非完全隐藏。具体替换规则属于 `outcome.action` 语义,在 schema 属性层级配置。
+对敏感属性（如 SSN），`effect=mask` 在读取时把存储值替换为掩码模式（如 `*****`），而非完全隐藏。具体替换规则属于 `outcome.action` 语义，在 schema 属性层级配置。
 
 ---
 
-## **9. 授权引擎与求值**
+## 9. 授权引擎与求值
 
-### **9.1 角色展开**
+### 9.1 角色展开
 
 有效角色需通过角色继承展开：
 
@@ -743,7 +743,7 @@ All_Employees -> Dev -> Team_Android
 > [!NOTE]
 > 当前实现会同时读取 JWT 中的 `role_ids` 与 auth-store `user_role` 映射，并基于 role profiles 递归展开 `parent_role_ids`。任一数据访问失败时都必须 fail-closed。
 
-### **9.1.1 OU 祖先与策略展开**
+### 9.1.1 OU 祖先与策略展开
 
 除角色展开外，引擎还需解析用户 OU 归属链，并收集继承策略：
 
@@ -760,7 +760,7 @@ All_Employees -> Dev -> Team_Android
 * `block_inheritance` 与 `enforced` 在 v1 中预留但不生效，所有祖先策略都参与合并
 * OU 永远不是 resource grants 中的 principal_type
 
-### **9.1.2 Manager Chain 解析**
+### 9.1.2 Manager Chain 解析
 
 引擎沿 `report_to_user_id` 向上走，填充 `${requester.manager_chain}`：
 
@@ -768,9 +768,9 @@ All_Employees -> Dev -> Team_Android
 * 若读取阶段发现环，应按 fail-closed 处理
 * `${requester.direct_report_ids}` 仅在规则显式引用时，通过 direct-report 反向查找按需解析
 
-### **9.2 有效策略收集**
+### 9.2 有效策略收集
 
-每次请求,引擎汇集对请求者生效的所有策略：
+每次请求，引擎汇集对请求者生效的所有策略：
 
 ```text
 1) 用户直接附加:
@@ -788,21 +788,21 @@ All_Employees -> Dev -> Team_Android
    读取 policy_profile,去重后得到 effective policy set。
 ```
 
-结果是一个扁平、去重的策略集合,每个策略带一条或多条 statement。
+结果是一个扁平、去重的策略集合，每个策略带一条或多条 statement。
 
-### **9.3 Statement 扁平化与预过滤**
+### 9.3 Statement 扁平化与预过滤
 
 把所有已收集策略中的 statement 扁平为一个列表。引擎对其做预过滤：
 
 * `schema` 必须匹配当前目标 schema
 * `ops` 必须包含当前请求的操作
 
-不匹配的 statement 在条件求值前丢弃。剩余集合即为本次请求的**候选集**。
+不匹配的 statement 在条件求值前丢弃。剩余集合即为本次请求的候选集。
 
 > [!NOTE]
-> 像 `resource_grant` 索引这样的物理投影可用于热路径(例如 `read` 已知 `resource_id`)上的预过滤短路。这些投影产出的决策必须与对完整候选集的求值结果一致。
+> 像 `resource_grant` 索引这样的物理投影可用于热路径（例如 `read` 已知 `resource_id`）上的预过滤短路。这些投影产出的决策必须与对完整候选集的求值结果一致。
 
-### **9.4 上下文展开**
+### 9.4 上下文展开
 
 在评估规则前，引擎将以下占位符替换为真实值：
 
@@ -826,7 +826,7 @@ All_Employees -> Dev -> Team_Android
 { "a": "owner.user_id", "v": "in:${requester.direct_report_ids}" }
 ```
 
-### **9.5 条件求值**
+### 9.5 条件求值
 
 规则逻辑（`l/c`）针对以下数据求值：
 
@@ -843,12 +843,12 @@ All_Employees -> Dev -> Team_Android
 
 未解析的占位符或非法策略表达式必须 fail-closed。
 
-### **9.6 冲突解决**
+### 9.6 冲突解决
 
 多条候选 statement 可能同时命中同一行或同一属性。合并遵循两条有序规则：
 
-1. **Deny overrides Allow。** 只要有任何匹配的 `effect=deny` statement 命中 `(ops, row)`,访问即被拒绝 —— 即使存在允许的 statement。
-2. **Mask overrides Allow。** 行已通过 `allow` 的行范围,但目标属性又被 `mask` statement 命中时,该属性按 `outcome.action` 进行掩码 / 替换。
+1. **Deny overrides Allow。** 只要有任何匹配的 `effect=deny` statement 命中 `(ops, row)`，访问即被拒绝，即使同时存在允许的 statement。
+2. **Mask overrides Allow。** 行已通过 `allow` 的行范围，但目标属性又被 `mask` statement 命中时，该属性按 `outcome.action` 进行掩码 / 替换。
 
 对单行 `r` 与操作 `op` 的判定流程：
 
@@ -868,15 +868,15 @@ else:
 
 补充说明：
 
-* 单个 policy 内 statement 顺序不影响结果;优先级完全由 `effect` 决定
-* 不同 selector 的 `allow` statement **并集**其行范围
-* 不同 selector 的 `deny` statement **并集**其排除范围(任一 deny 命中即拒)
-* 不同 `outcome.attrs` 的 `mask` statement **并集**其掩码属性集合
-* OU 继承、角色继承、用户直接附加来源的 statement 平等参与,**没有**基于附加面的额外优先级
+* 单个 policy 内 statement 顺序不影响结果；优先级完全由 `effect` 决定
+* 不同 selector 的 `allow` statement 并集其行范围
+* 不同 selector 的 `deny` statement 并集其排除范围（任一 deny 命中即拒）
+* 不同 `outcome.attrs` 的 `mask` statement 并集其掩码属性集合
+* OU 继承、角色继承、用户直接附加来源的 statement 平等参与，没有基于附加面的额外优先级
 
 ---
 
-## **10. 查询过滤与执行**
+## 10. 查询过滤与执行
 
 当前 data-plane 会把 grant 派生的条件下推到 Forma query conditions。
 
@@ -900,21 +900,21 @@ JOIN matched_entities m ON t.ltbase_row_id = m.row_id;
 
 ---
 
-## **11. AI Agent 安全性**
+## 11. AI Agent 安全性
 
 为防止 prompt injection 与意外提权：
 
 * Policy 必须静态定义在策略存储中
-* Agent 可以请求数据,但 **不能贡献 statement、condition 或 selector**
+* Agent 可以请求数据，但不能贡献 statement、condition 或 selector
 * Statement 求值必须是确定且安全的
 * `${...}` 变量只允许在服务端展开
 * 非法策略载荷默认拒绝（fail-closed）
 
-这保证 Agent 永远只是请求动作,而不是生成实际策略条件。
+这保证 Agent 只能请求动作，不能生成实际策略条件。
 
 ---
 
-## **12. 审计与记账**
+## 12. 审计与记账
 
 与授权相关的决策应被记录：
 
@@ -934,19 +934,17 @@ Audit events 作为 auth-store 里的项目级审计日志追加写入。底层�
 
 ---
 
-## **13. 总结**
+## 13. 总结
 
 LTBase AAA 框架：
 
-* 清晰拆分 **Authentication**、**Identity Binding**、**Authorization**
-* 支持仅依赖社交登录的企业级入驻模型
-* 提供面向邀请、白名单、审批流的 **policy-driven identity binding**
-* 采用单一 **统一策略模型** —— 所有授权决策都通过 `policy_profile` 中的 `statement`（allow / deny / mask）表达,可附加到 user / role / OU
-* 以 **deny-overrides** + **mask-overrides-allow** 优先级合并 statement;默认 fail-closed
+* 清晰拆分 Authentication、Identity Binding、Authorization
+* 支持仅依赖社交登录的企业入驻模型
+* 提供面向邀请、白名单、审批流的 policy-driven identity binding
+* 采用单一统一策略模型：所有授权决策都通过 `policy_profile` 中的 `statement`（allow / deny / mask）表达，可附加到 user / role / OU
+* 以 deny-overrides + mask-overrides-allow 优先级合并 statement；默认 fail-closed
 * 以接近 Active Directory 的方式表达组织结构（OU 归属 + manager 关系）与 OU 子树策略继承
-* 支持层级角色展开,并把 user / role / OU 三类主体收敛到同一个 evaluator
-* 保留 `resource_grant` 等热路径投影作为内部优化,而不是独立的逻辑概念
+* 支持层级角色展开，并把 user / role / OU 三类主体收敛到同一个 evaluator
+* 保留 `resource_grant` 等热路径投影作为内部优化，而不是独立的逻辑概念
 * 确保 AI Agent 安全
 * 生成完整审计轨迹
-
-该设计使 LTBase 能作为 **AI-native、enterprise-ready 的 BaaS 平台** 演进。

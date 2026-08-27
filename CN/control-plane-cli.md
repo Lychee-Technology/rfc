@@ -1,6 +1,6 @@
-# Control Plane — AWS Lambda Console 调用手册
+# Control Plane：AWS Lambda Console 调用手册
 
-本文档说明如何通过 **AWS Lambda Console 的 Test 功能**直接调用 Control Plane Lambda，用于运维和排查。
+本文档说明如何通过 AWS Lambda Console 的 Test 功能直接调用 Control Plane Lambda，用于运维和排查。
 
 ## 1. 当前模型
 
@@ -267,7 +267,7 @@
 
 #### Admin Policy 创建与绑定示例
 
-Control Plane Admin API 要求调用者持有 admin policy。以下示例展示如何创建 admin policy 并绑定给用户。
+Control Plane Admin API 要求调用者持有 admin policy。下面是创建 admin policy 并绑定给用户的示例。
 
 **创建 admin policy：**
 
@@ -559,7 +559,7 @@ HTTP 状态码（HTTP 调用时适用）：
 
 ## 6. Control-Plane Store 对象模型（当前 DynamoDB backend）
 
-当前控制面支持 DynamoDB 与 PostgreSQL store。以下对象模型描述的是 **DynamoDB backend** 的物理布局，用于说明当前 Lambda / CLI 请求最终如何映射到底层记录。
+当前控制面支持 DynamoDB 与 PostgreSQL store。以下对象模型描述的是 DynamoDB backend 的物理布局，说明当前 Lambda / CLI 请求最终如何映射到底层记录。
 
 ### 6.1 Project Metadata
 

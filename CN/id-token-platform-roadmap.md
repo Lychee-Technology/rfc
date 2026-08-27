@@ -1,6 +1,6 @@
 # 一、总体演进路径（分层视角）
 
-你的平台会逐步演进为：
+平台按以下顺序演进：
 
 ```
 Phase 1 → Token Vault（OAuth）
@@ -15,9 +15,9 @@ Phase 6 → High Assurance Security（mTLS / PoP / 审计强化）
 
 # 二、Phase 1：安全 OAuth Token 托管（0–2个月）
 
-## 🎯目标
+## 目标
 
-建立最小可信基础设施：**安全存储 + 不泄漏 Token**
+建立最小可信基础设施：安全存储 Token，且不泄漏 Token。
 
 ## 核心功能
 
@@ -48,17 +48,17 @@ Phase 6 → High Assurance Security（mTLS / PoP / 审计强化）
 
 ## 验收标准
 
-* ✔ DB dump 无法还原 token
-* ✔ Agent / API 不返回 token
-* ✔ refresh 流程稳定
+* DB dump 无法还原 token
+* Agent / API 不返回 token
+* refresh 流程稳定
 
 
 
 # 三、Phase 2：Capability Gateway（2–4个月）
 
-## 🎯目标
+## 目标
 
-**彻底切断 AI Agent 与 Token 的接触**
+切断 AI Agent 与 Token 的接触。
 
 ## 核心功能
 
@@ -99,15 +99,15 @@ Phase 6 → High Assurance Security（mTLS / PoP / 审计强化）
 
 ## 验收标准
 
-* ✔ 无任何路径能让 Agent 获取 token
-* ✔ 能阻止未授权 action
-* ✔ 所有调用可追踪
+* 无任何路径能让 Agent 获取 token
+* 能阻止未授权 action
+* 所有调用可追踪
 
 
 
 # 四、Phase 3：企业 SSO 接入（OIDC + SAML）（4–6个月）
 
-## 🎯目标
+## 目标
 
 支持企业身份体系（不仅是 OAuth）
 
@@ -143,17 +143,17 @@ Phase 6 → High Assurance Security（mTLS / PoP / 审计强化）
 
 ## 验收标准
 
-* ✔ SAML/OIDC 不泄漏 assertion/token
-* ✔ 不同协议统一为同一身份模型
-* ✔ 支持多租户 IdP
+* SAML/OIDC 不泄漏 assertion/token
+* 不同协议统一为同一身份模型
+* 支持多租户 IdP
 
 
 
 # 五、Phase 4：Internal STS（委托系统）（6–8个月）
 
-## 🎯目标
+## 目标
 
-建立**真正的“无凭证执行模型”**
+建立“无凭证执行模型”。
 
 ## 核心功能
 
@@ -193,15 +193,15 @@ Agent → Gateway → Policy → STS → Grant → Connector → API
 
 ## 验收标准
 
-* ✔ token 不跨服务传播
-* ✔ grant 过期后不可复用
-* ✔ 支持 revoke / approval
+* token 不跨服务传播
+* grant 过期后不可复用
+* 支持 revoke / approval
 
 
 
 # 六、Phase 5：企业权限体系（SCIM + Identity Graph）（8–10个月）
 
-## 🎯目标
+## 目标
 
 从“token 权限”升级到“企业级权限治理”
 
@@ -239,15 +239,15 @@ Agent → Gateway → Policy → STS → Grant → Connector → API
 
 ## 验收标准
 
-* ✔ 权限不再依赖 token scope
-* ✔ 可动态变更权限
-* ✔ 权限变化实时生效
+* 权限不再依赖 token scope
+* 可动态变更权限
+* 权限变化实时生效
 
 
 
 # 七、Phase 6：高安全强化（10–12个月）
 
-## 🎯目标
+## 目标
 
 达到企业级/高安全级别
 
@@ -279,9 +279,9 @@ Agent → Gateway → Policy → STS → Grant → Connector → API
 
 ## 验收标准
 
-* ✔ token 无法被重放
-* ✔ 内部攻击面显著降低
-* ✔ 审计链完整
+* token 无法被重放
+* 内部攻击面显著降低
+* 审计链完整
 
 
 
@@ -329,23 +329,23 @@ Agent → Gateway → Policy → STS → Grant → Connector → API
 
 ## 风险 1：设计成“Token Proxy”
 
-👉 解决：强制 Capability 模型
+解决：强制 Capability 模型
 
 ## 风险 2：SAML/OIDC 复杂度爆炸
 
-👉 解决：统一 Identity 抽象
+解决：统一 Identity 抽象
 
 ## 风险 3：Agent 绕过策略
 
-👉 解决：无通用 HTTP + 强策略
+解决：无通用 HTTP + 强策略
 
 ## 风险 4：日志泄漏 token
 
-👉 解决：全链路 redaction
+解决：全链路 redaction
 
 ## 风险 5：权限模型过于简单
 
-👉 解决：尽早引入 ABAC + Graph
+解决：尽早引入 ABAC + Graph
 
 
 
@@ -379,4 +379,4 @@ Capability Layer（无凭证区）
 
 # 十二、一句话路线总结
 
-**从“安全存 token” → “控制 token 使用” → “抽象身份” → “统一委托” → “企业权限治理” → “高安全执行平台”**
+从“安全存 token” → “控制 token 使用” → “抽象身份” → “统一委托” → “企业权限治理” → “高安全执行平台”

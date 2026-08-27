@@ -1,6 +1,6 @@
-# **LTBase AAA System — Technical Specification**
+# LTBase AAA System — Technical Specification
 
-This document defines the **complete Authentication, Authorization, and Accounting (AAA)** architecture for **LTBase**, designed for both social login environments and enterprise-grade access control requirements.
+This document defines the Authentication, Authorization, and Accounting (AAA) architecture for LTBase, covering both social login environments and enterprise access control requirements.
 
 The architecture explicitly separates three concerns:
 
@@ -10,27 +10,27 @@ The architecture explicitly separates three concerns:
 | **Identity Binding** | Map external identity to internal LTBase user   |
 | **Authorization**    | Enforce row-level and column-level permissions  |
 
-This separation enables LTBase to support invitation-based onboarding, whitelists, external approval systems, and multi-project deployments — without weakening security or overloading JWTs.
+This separation lets LTBase support invitation-based onboarding, whitelists, external approval systems, and multi-project deployments without weakening security or overloading JWTs.
 
 ---
 
-## **1. System Overview**
+## 1. System Overview
 
 The LTBase AAA system provides:
 
-* **Authentication** — External identity verification and JWT token issuance
-* **Identity Binding** — Maps external identities to internal users using policy-driven rules
-* **Fine-grained Authorization** — Enforces access at row-level and column/attribute-level
-* **Audit Trails** — Complete logging of all access events
-* **AI Safety** — Policy model safe for usage by AI Agents and tools
+* Authentication: external identity verification and JWT token issuance
+* Identity Binding: maps external identities to internal users using policy-driven rules
+* Fine-grained authorization: enforces access at row-level and column/attribute-level
+* Audit trails: logging of all access events
+* AI safety: policy model safe for usage by AI Agents and tools
 
-The authorization engine integrates with both **EntityMain + EAV business data** and the existing **LTBase query rule syntax** for expressive condition logic.
+The authorization engine integrates with both EntityMain + EAV business data and the existing LTBase query rule syntax for condition logic.
 
 ---
 
-## **2. Authentication — Login Service**
+## 2. Authentication — Login Service
 
-### **2.1 Purpose**
+### 2.1 Purpose
 
 The authentication layer is responsible for:
 
@@ -41,7 +41,7 @@ The authentication layer is responsible for:
 > [!IMPORTANT]
 > Authentication alone does **not** grant access to LTBase resources. An active Identity Binding is required.
 
-### **2.2 External Identity Model**
+### 2.2 External Identity Model
 
 Current implementation resolves external identity by combining a project-scoped lookup record with a deterministic fallback:
 
@@ -60,11 +60,11 @@ If no lookup record exists, it derives deterministic `user_id` and reads the use
 
 The user profile remains the source of truth for binding state in the current path.
 
-### **2.3 API Definition**
+### 2.3 API Definition
 
-The Login Service runs as an **independent microservice** with the following endpoints:
+The Login Service runs as an independent microservice with the following endpoints:
 
-#### **POST /api/v1/login/{provider}**
+#### POST /api/v1/login/{provider}
 
 Exchange a third-party identity token for an LTBase session token.
 
@@ -119,7 +119,7 @@ Exchange a third-party identity token for an LTBase session token.
 | 500    | `permission_list_failed`   | Failed to load permissions from effective roles      |
 | 500    | `exchange_failed`          | Failed to issue access/refresh token pair            |
 
-#### **POST /api/v1/id_bindings/{provider}**
+#### POST /api/v1/id_bindings/{provider}
 
 Bind a third-party identity token for an LTBase user.
 
@@ -169,11 +169,11 @@ Bind a third-party identity token for an LTBase user.
 | 500    | `id_binding_failed`   | Binding transaction or token issuance failed       |
 
 
-### **2.4 JWT Design**
+### 2.4 JWT Design
 
 LTBase JWTs:
 
-* Use **internal user_id** as `sub` (not external provider subject)
+* Use internal user_id as `sub` (not external provider subject)
 * Never include permissions or binding state
 * Are short-lived and stateless
 
@@ -191,9 +191,9 @@ LTBase JWTs:
 
 ---
 
-## **3. Identity Binding Layer**
+## 3. Identity Binding Layer
 
-### **3.1 Motivation**
+### 3.1 Motivation
 
 In enterprise environments:
 
@@ -201,11 +201,11 @@ In enterprise environments:
 * Access may depend on invitation codes, email domains, approvals, or external systems
 * One external identity may need access to multiple projects
 
-Therefore, LTBase introduces an explicit **Identity Binding** layer between authentication and authorization.
+Therefore, LTBase introduces an explicit Identity Binding layer between authentication and authorization.
 
-### **3.2 Internal User (Authorization Subject)**
+### 3.2 Internal User (Authorization Subject)
 
-The internal LTBase user is the **only subject used by authorization policies**.
+The internal LTBase user is the only subject used by authorization policies.
 
 User profile is stored as a control-plane auth-store record:
 
@@ -213,9 +213,9 @@ User profile is stored as a control-plane auth-store record:
 | ----------- | ---------------- | --------------- |
 | User Profile | `project_id + user_id` | `user_id`, `project_id`, `created_at`, `last_login_at`, `provider`, `issuer`, `external_sub`, `identity_claims`, `primary_ou_id`, `report_to_user_id` |
 
-### **3.3 Identity Binding Schema**
+### 3.3 Identity Binding Schema
 
-LTBase authservice uses a **logical-record binding model** instead of a dedicated `identity_binding` table:
+LTBase authservice uses a logical-record binding model instead of a dedicated `identity_binding` table:
 
 | Binding State | Auth Store Representation |
 | ------------- | ------------------------- |
@@ -223,7 +223,7 @@ LTBase authservice uses a **logical-record binding model** instead of a dedicate
 | Bound | User profile record exists for `project_id + user_id` |
 | Bound via code | Referral record is validated and consumed in the same transaction that creates the user profile and external lookup (optional verified-email lookup may also be written) |
 
-This design enables:
+This design supports:
 
 | Capability                  | Description                                             |
 | --------------------------- | ------------------------------------------------------- |
@@ -231,7 +231,7 @@ This design enables:
 | Deterministic binding state | Binding state is resolved through deterministic user key |
 | Lifecycle control           | Binding is controlled through record existence and conditional writes |
 
-### **3.4 Login & Binding Flow**
+### 3.4 Login & Binding Flow
 
 ```mermaid
 sequenceDiagram
@@ -270,7 +270,7 @@ sequenceDiagram
 6. If not bound → return `identity_unbound`
 7. Client calls bind endpoint with referral code to create binding atomically
 
-### **3.5 Binding Policy Model**
+### 3.5 Binding Policy Model
 
 Binding policies reuse LTBase rule syntax and are evaluated at bind-time:
 
@@ -314,58 +314,58 @@ Binding policies reuse LTBase rule syntax and are evaluated at bind-time:
 
 ---
 
-## **4. Authorization Goals**
+## 4. Authorization Goals
 
 The authorization engine must ensure:
 
-* A user only sees rows they are permitted to see (**row-level restriction**)
-* A user only sees columns/attributes they are allowed to (**column/attribute-level**)
-* Runtime policy is **fail-closed** when policy resolution/evaluation fails
+* A user only sees rows they are permitted to see (row-level restriction)
+* A user only sees columns/attributes they are allowed to (column/attribute-level)
+* Runtime policy is fail-closed when policy resolution/evaluation fails
 * Policy statements can reference dynamic entity attributes in EAV and `${requester.*}` context
 * Rules are safe and structured (no code injection)
 
 > [!IMPORTANT]
-> **Row access ≠ Column visibility** — both are distinct control layers for data governance and compliance.
+> **Row access ≠ Column visibility**: both are distinct control layers for data governance and compliance.
 
-### **4.1 Unified Policy Model**
+### 4.1 Unified Policy Model
 
-All authorization is expressed through a single concept — `policy_profile` — that holds one or more `statement` items. A statement carries:
+All authorization is expressed through a single concept, `policy_profile`, which holds one or more `statement` items. A statement carries:
 
-* `effect` — `allow` / `deny` / `mask`
-* `ops` — set of operations (`create` / `read` / `update` / `delete`, or `*` for all)
-* `schema` — entity scope
-* `selector` — row scope (`resource_id` list, `filter`, or both)
-* `outcome` — optional column-level annotation (which attrs, what action)
-* `condition` — optional `l/c/a/v` rule, evaluated against entity attributes and `${requester.*}` context
+* `effect`: `allow` / `deny` / `mask`
+* `ops`: set of operations (`create` / `read` / `update` / `delete`, or `*` for all)
+* `schema`: entity scope
+* `selector`: row scope (`resource_id` list, `filter`, or both)
+* `outcome`: optional column-level annotation (which attrs, what action)
+* `condition`: optional `l/c/a/v` rule, evaluated against entity attributes and `${requester.*}` context
 
-Policies are attached to principals (`user`, `role`) and to `OU` containers; OU attachments inherit down the OU subtree (see 5.7.2). The same evaluator processes all three attachment surfaces, with **deny-overrides** and **mask-overrides-allow** precedence (see 9.6).
+Policies are attached to principals (`user`, `role`) and to `OU` containers; OU attachments inherit down the OU subtree (see 5.7.2). The same evaluator processes all three attachment surfaces, with deny-overrides and mask-overrides-allow precedence (see 9.6).
 
 > [!NOTE]
-> Earlier drafts of this document carried three parallel authorization mechanisms — `resource_grant`, `permission_profile`, and `policy_profile`. They have been folded into the unified statement model above. `resource_grant` survives only as a possible **physical projection** (see 4.2), not as a separate logical concept.
+> Earlier drafts of this document carried three parallel authorization mechanisms: `resource_grant`, `permission_profile`, and `policy_profile`. They have been folded into the unified statement model above. `resource_grant` survives only as a possible physical projection (see 4.2), not as a separate logical concept.
 >
 > For the canonical definition of each legacy term, the full migration mapping, and the JWT `permissions` claim compatibility contract, see `policy-permission-relationship.md`.
 
-### **4.2 Physical Optimizations**
+### 4.2 Physical Optimizations
 
-The auth store may maintain denormalized projections of single-statement policies — for example, a `resource_grant`-style index for hot-path `resource_id` / `filter` lookups — as a runtime optimization. These projections are **caches** of the unified policy model and must reflect the same effective decisions as evaluating the full statement set.
+The auth store may maintain denormalized projections of single-statement policies as a runtime optimization, for example a `resource_grant`-style index for hot-path `resource_id` / `filter` lookups. These projections are caches of the unified policy model and must reflect the same effective decisions as evaluating the full statement set.
 
 ---
 
-## **5. AAA Data Model**
+## 5. AAA Data Model
 
-### **5.1 Business Entities — EntityMain + EAV**
+### 5.1 Business Entities — EntityMain + EAV
 
-Business entities use the **DSQL** based data model:
+Business entities use the DSQL based data model:
 
-* **Primary Table (`entity_main_<project_id>`):**
+* Primary table (`entity_main_<project_id>`):
   Stores high-frequency fixed columns: `{ ltbase_schema_id, ltbase_row_id, ltbase_created_at, ltbase_updated_at, text_01...10, ... }`
 
-* **EAV Data Table (`eav_data_<project_id>`):**
+* EAV data table (`eav_data_<project_id>`):
   Stores dynamic attributes with typed value columns: `{ schema_id, row_id, attr_id, value_text, value_numeric, ... }`
 
 This dynamic attribute model requires authorization conditions that match attributes from `eav_data` (mapping `attr_name` to `attr_id` and using `value_text`/`value_numeric`) rather than static columns.
 
-### **5.2 Authorization Entities**
+### 5.2 Authorization Entities
 
 | Record Family | Purpose |
 | ------------- | ------- |
@@ -388,31 +388,31 @@ This dynamic attribute model requires authorization conditions that match attrib
 
 Policies remain structured objects, not EAV records. Project-scoped client calls go through the control-plane authz API; they cannot mutate policy documents through the data-plane EAV path.
 
-### **5.3 Entity Relationships**
+### 5.3 Entity Relationships
 
-The system follows a standard **RBAC (Role-Based Access Control)** model with support for hierarchical groups, plus an **Active Directory–style organizational hierarchy** for org-chart modeling:
+The system follows a standard RBAC (Role-Based Access Control) model with support for hierarchical groups, plus an Active Directory-style organizational hierarchy for org-chart modeling:
 
 * **User**: The internal identity principal
 * **Role / Group**: A named bundle of policy attachments and a node in the role-inheritance graph
   * Groups are functionally equivalent to Roles
-  * **Inheritance**: A Role can inherit from another Role (e.g., `Manager` inherits `Employee`)
+  * Inheritance: a Role can inherit from another Role (e.g., `Manager` inherits `Employee`)
   * Roles are the **only** vehicle for cross-cutting / matrix membership (a user can hold many roles)
 * **Policy**: A named container of one or more `statement` items. Statements carry `effect` (allow / deny / mask), `ops`, `schema`, optional `selector` and `outcome`, and optional `condition` (see §6).
 * **OU (Organizational Unit)**: Hierarchical container reflecting reporting structure
-  * Each user has exactly **one `primary_ou_id`** (AD-faithful single containment)
+  * Each user has exactly one `primary_ou_id` (AD-faithful single containment)
   * OUs form a tree via `parent_ou_id` and a materialized `ou_path`
   * **OUs are not ACL principals.** They carry authorization indirectly by attaching `policy_profile` items, which inherit down the OU subtree (analogous to AD Group Policy)
 * **Manager**: Single-valued `report_to_user_id` on each user; reverse `direct_report` index supports "who reports to X" queries. Dotted-line / matrix reporting is modeled with Roles, not with additional manager edges.
 
-**Relationship Flow:**
+Relationship flow:
 
-1. **External Identity** is normalized to deterministic internal `user_id`, then mapped to **User Profile**
-2. **Users** are assigned **Roles** (via `user role` items) and placed in exactly one **OU** (via `primary_ou_id`)
-3. **Policies** may be attached to **Users**, **Roles**, or **OUs** via the corresponding attachment records
-4. **OU policy attachments** inherit down the OU subtree along `ou_path`
-5. **Authorization** evaluates the union of policies reachable through user-direct, role (with role inheritance), and OU-ancestor attachments, combining statements per the precedence rules in §9.6
+1. External identity is normalized to a deterministic internal `user_id`, then mapped to a user profile
+2. Users are assigned roles (via `user role` items) and placed in exactly one OU (via `primary_ou_id`)
+3. Policies may be attached to users, roles, or OUs via the corresponding attachment records
+4. OU policy attachments inherit down the OU subtree along `ou_path`
+5. Authorization evaluates the union of policies reachable through user-direct, role (with role inheritance), and OU-ancestor attachments, combining statements per the precedence rules in §9.6
 
-### **5.4 Logical Auth Store Record Definitions**
+### 5.4 Logical Auth Store Record Definitions
 
 The AAA design depends on a logical auth store contract, not a specific physical backend. Each record family below must be addressable by project scope and must support the listed access pattern efficiently in all supported backends. Backend-specific mappings are documented in `aaa-control-plane-store-mapping.md`.
 
@@ -435,9 +435,9 @@ The AAA design depends on a logical auth store contract, not a specific physical
 | Session edge | List by `project_id + parent_jti` | Revoke-chain traversal |
 | Audit event | Append-only by `project_id + event_time` | Time-ordered security log |
 
-### **5.5 Project Isolation Strategy (No SQL Views)**
+### 5.5 Project Isolation Strategy (No SQL Views)
 
-Project isolation is implemented by **project-scoped record ownership**, not SQL views:
+Project isolation is implemented by project-scoped record ownership, not SQL views:
 
 | Isolation Control | Description |
 | ----------------- | ----------- |
@@ -448,7 +448,7 @@ Project isolation is implemented by **project-scoped record ownership**, not SQL
 
 This design avoids dynamic SQL view provisioning and keeps the control-plane storage contract portable across backends.
 
-### **5.6 Identifier Normalization and Encoding Rules**
+### 5.6 Identifier Normalization and Encoding Rules
 
 To avoid collisions and cross-language inconsistencies, identifiers must be normalized deterministically before they are persisted or used in lookups:
 
@@ -468,9 +468,9 @@ General rules:
 * Any backend-specific encoding must be deterministic and reversible where needed.
 * Any invalid or empty normalized segment must fail fast at repository boundary.
 
-### **5.7 Organization Structure (Org Chart)**
+### 5.7 Organization Structure (Org Chart)
 
-LTBase models organizational structure with two independent relationships, modeled after Microsoft Active Directory:
+LTBase models organizational structure with two independent relationships, following Microsoft Active Directory:
 
 | Relationship | Field | Cardinality | Purpose |
 | ------------ | ----- | ----------- | ------- |
@@ -481,9 +481,9 @@ LTBase models organizational structure with two independent relationships, model
 > Containment and reporting are **independent** axes. A user's manager need not sit in the same OU (e.g., functional manager in a different OU). Authorization rules can reference either or both.
 
 > [!NOTE]
-> "Org chart" is the concept; the data model is **org units** (`org_units` / OU). For the REST/JSON/action names of org units and the other built-in resources, see `API-specs-control-plane.en.md` §3.4 (Built-in Resources).
+> "Org chart" is the concept; the data model is org units (`org_units` / OU). For the REST/JSON/action names of org units and the other built-in resources, see `API-specs-control-plane.en.md` §3.4 (Built-in Resources).
 
-#### **5.7.1 OU Tree and Materialized Path**
+#### 5.7.1 OU Tree and Materialized Path
 
 The OU tree is encoded with both a direct `parent_ou_id` pointer and a materialized `ou_path` for efficient subtree queries:
 
@@ -495,21 +495,21 @@ ou:team_android   parent_ou_id = ou_mobiledev ou_path = "/{ou_rnd}/{ou_mobiledev
 
 Key properties:
 
-* `ou_path` is built from **stable `ou_id` segments**, not display names, so renaming an OU does not invalidate the path.
-* "All users under R&D" becomes a simple `begins_with` predicate on `ou_path` — no recursive expansion at query time.
+* `ou_path` is built from stable `ou_id` segments, not display names, so renaming an OU does not invalidate the path.
+* "All users under R&D" becomes a `begins_with` predicate on `ou_path`, with no recursive expansion at query time.
 * Moving an OU (changing `parent_ou_id`) requires rewriting `ou_path` and `ou_user` index entries for the entire subtree. This is treated as an administrative operation and may be applied asynchronously.
-* Each user has exactly one `primary_ou_id`. Cross-OU / matrix membership is **not modeled on the OU axis** — it is expressed by assigning the user additional Roles.
+* Each user has exactly one `primary_ou_id`. Cross-OU / matrix membership is not modeled on the OU axis; it is expressed by assigning the user additional Roles.
 
-#### **5.7.2 OU Policy Inheritance (GPO-Style)**
+#### 5.7.2 OU Policy Inheritance (GPO-Style)
 
-Authorization is attached to OUs only through `policy_profile` records, via an **OU policy attachment** record identified by `project_id + ou_id + policy_id`.
+Authorization is attached to OUs only through `policy_profile` records, via an OU policy attachment record identified by `project_id + ou_id + policy_id`.
 
 At login, the authorization engine walks the user's `primary_ou.ou_path` from root to leaf and unions all attached policies into the effective policy set. This mirrors AD's GPO inheritance model: a policy attached at `R&D` automatically applies to every user under `R&D/MobileDev/Team_Android` without per-OU duplication.
 
 > [!NOTE]
 > OUs are **not** valid principals for `resource_grant` records or `principal_policy_attachment`. To grant something OU-wide, create (or pick) a `policy_profile` and attach it via `ou_policy`. Ad-hoc `policy_profile` instances may be created from the admin UI in a future version when an OU needs a one-off policy.
 
-##### **Inheritance Modifiers (Reserved, v1 Disabled)**
+##### Inheritance Modifiers (Reserved, v1 Disabled)
 
 The schema reserves two AD-equivalent flags. They are accepted in storage but ignored by the v1 evaluator; precedence rules will be specified before they are enabled.
 
@@ -518,15 +518,15 @@ The schema reserves two AD-equivalent flags. They are accepted in storage but ig
 | `block_inheritance` | OU profile | "Block Inheritance" | When true, an OU stops inheriting policies from its ancestors |
 | `enforced` | OU policy attachment | "Enforced / No Override" | When true, a policy continues to flow downward even past a `block_inheritance` child |
 
-#### **5.7.3 Manager Relationship**
+#### 5.7.3 Manager Relationship
 
 The `report_to_user_id` attribute on a user profile is a single-valued pointer to that user's direct manager. The system maintains a direct-report reverse lookup for fast listing by manager.
 
-* **Single-valued only.** Dotted-line / secondary managers are deliberately not modeled in the schema; express them with a dedicated Role (e.g., `Project_X_DottedReport`).
-* **Cycle prevention** is enforced at write time: a user cannot directly or transitively report to themselves.
-* **Chain depth** is bounded (default ≤ 10) when expanding the manager chain at login, to keep authorization context size predictable.
+* Single-valued only. Dotted-line / secondary managers are deliberately not modeled in the schema; express them with a dedicated Role (e.g., `Project_X_DottedReport`).
+* Cycle prevention is enforced at write time: a user cannot directly or transitively report to themselves.
+* Chain depth is bounded (default ≤ 10) when expanding the manager chain at login, to keep authorization context size predictable.
 
-#### **5.7.4 Effective Context From the Org Chart**
+#### 5.7.4 Effective Context From the Org Chart
 
 These derived values are computed at login (or on policy refresh) and made available to rule evaluation:
 
@@ -542,11 +542,11 @@ These are populated and substituted by the engine; clients and AI agents cannot 
 
 ---
 
-## **6. Policy & Statement Syntax**
+## 6. Policy & Statement Syntax
 
-LTBase expresses every authorization decision as a **policy** containing one or more **statements**. Statements are the unit of evaluation.
+LTBase expresses every authorization decision as a policy containing one or more statements. Statements are the unit of evaluation.
 
-### **6.1 Policy Document Shape**
+### 6.1 Policy Document Shape
 
 ```json
 {
@@ -558,7 +558,7 @@ LTBase expresses every authorization decision as a **policy** containing one or 
 
 A single policy may carry mixed effects (allow / deny / mask). Combination rules across statements and across policies are defined in §9.6.
 
-### **6.2 Statement Schema**
+### 6.2 Statement Schema
 
 | Field | Required | Type | Description |
 | ----- | -------- | ---- | ----------- |
@@ -569,7 +569,7 @@ A single policy may carry mixed effects (allow / deny / mask). Combination rules
 | `outcome` | Required for `mask`; optional for `allow` | object | Column-scope annotation (see 6.5) |
 | `condition` | Optional | object | Additional `l/c/a/v` predicate (see 6.3) |
 
-### **6.3 Condition Syntax (`l/c/a/v`)**
+### 6.3 Condition Syntax (`l/c/a/v`)
 
 Conditions reuse the LTBase query-rule format and may reference both entity attributes and `${requester.*}` context variables (see §9.4):
 
@@ -598,7 +598,7 @@ Conditions reuse the LTBase query-rule format and may reference both entity attr
 
 Nested `l/c` blocks are allowed. The same syntax serves row-scope narrowing and column-scope predicates.
 
-### **6.4 Selector Syntax**
+### 6.4 Selector Syntax
 
 A `selector` narrows a statement to a subset of rows in `schema`. Two forms, may be combined (union):
 
@@ -620,9 +620,9 @@ A `selector` narrows a statement to a subset of rows in `schema`. Two forms, may
 Each `filter` key is an attribute name; each value is an operator-prefixed expression supported by the data-plane filter parser.
 
 > [!NOTE]
-> Stored records may expose the persisted selector as `filter_json` / `filter_hash` internally for indexing. Clients **submit** `filter` in the structured form above; persisted hashes are an implementation detail and must not appear in `create-iam-authz-records` requests.
+> Stored records may expose the persisted selector as `filter_json` / `filter_hash` internally for indexing. Clients submit `filter` in the structured form above; persisted hashes are an implementation detail and must not appear in `create-iam-authz-records` requests.
 
-### **6.5 Outcome Schema (Column-Level)**
+### 6.5 Outcome Schema (Column-Level)
 
 ```json
 {
@@ -632,11 +632,11 @@ Each `filter` key is an attribute name; each value is an operator-prefixed expre
 }
 ```
 
-* When `effect=allow` and no `outcome` is given, the statement allows the **whole row** for the given `ops` (every attribute readable / writable).
+* When `effect=allow` and no `outcome` is given, the statement allows the whole row for the given `ops` (every attribute readable / writable).
 * When `effect=mask`, `outcome.attrs` and `outcome.action=mask` are required. `mask` suppresses or substitutes the listed attributes regardless of any matching `allow` (see §9.6).
 * `outcome.scope=row` is implicit and need not be written.
 
-### **6.6 Worked Example**
+### 6.6 Worked Example
 
 > "Users in `MobileDev` OU can read all tickets in their OU subtree; managers additionally see their direct reports' contact info; `ssn` is always masked on read."
 
@@ -672,11 +672,11 @@ Attaching this policy to OU `MobileDev` via `ou_policy_attachment` makes it appl
 
 ---
 
-## **7. Row-Level Access Control**
+## 7. Row-Level Access Control
 
 A row-level statement determines whether a given entity (row) is visible or actionable. Row scope is expressed via `selector` (`resource_id` list and/or `filter`), optionally further narrowed by `condition`.
 
-**Example — User can read only rows they own:**
+Example, a user can read only rows they own:
 
 ```json
 {
@@ -691,14 +691,14 @@ At runtime, list/read operations push the union of allow-statement selectors int
 
 ---
 
-## **8. Column / Attribute-Level Access Control**
+## 8. Column / Attribute-Level Access Control
 
 Column-level decisions are expressed through `outcome.scope=column` on a statement. The `effect` field determines what happens at the attribute:
 
-* `effect=allow` + `outcome.scope=column` — extend visibility to the listed attributes
-* `effect=mask` + `outcome.scope=column` — suppress or substitute the listed attributes regardless of any matching `allow` (mask wins over allow at the attribute level; see §9.6)
+* `effect=allow` + `outcome.scope=column`: extend visibility to the listed attributes
+* `effect=mask` + `outcome.scope=column`: suppress or substitute the listed attributes regardless of any matching `allow` (mask wins over allow at the attribute level; see §9.6)
 
-Principal scoping (which users get this behavior) is determined by **where the policy is attached**, not by encoding role checks inside the condition. This is the canonical way to express "managers can read email":
+Principal scoping (which users get this behavior) is determined by where the policy is attached, not by encoding role checks inside the condition. This is the canonical way to express "managers can read email":
 
 ```json
 // policy attached only to role `Manager`
@@ -710,7 +710,7 @@ Principal scoping (which users get this behavior) is determined by **where the p
 }
 ```
 
-**Example — Mask SSN universally:**
+Example, mask SSN universally:
 
 ```json
 {
@@ -724,15 +724,15 @@ Principal scoping (which users get this behavior) is determined by **where the p
 > [!NOTE]
 > Current implementation baseline mainly enforces row-level scope. Column-level statements (`outcome.scope=column`) are part of the integrated design and are introduced incrementally.
 
-### **Data Masking (Optional)**
+### Data Masking (Optional)
 
 For sensitive attributes (e.g., SSN), `effect=mask` replaces the stored value with a masking pattern (e.g., `*****`) at read time instead of suppressing it entirely. This is akin to dynamic data masking in database systems. The substitution rule is part of `outcome.action` semantics and is configured at the schema attribute level.
 
 ---
 
-## **9. Authorization Engine & Evaluation**
+## 9. Authorization Engine & Evaluation
 
-### **9.1 Role Expansion**
+### 9.1 Role Expansion
 
 Compute effective roles by resolving hierarchy:
 
@@ -746,7 +746,7 @@ The engine must expand inherited roles before evaluating permissions.
 > Current implementation resolves effective roles from both JWT `role_ids` and auth-store `user_role` mappings,
 > then expands `parent_role_ids` transitively from role profiles (fail-closed on data access errors).
 
-### **9.1.1 OU Ancestor & Policy Expansion**
+### 9.1.1 OU Ancestor & Policy Expansion
 
 In addition to role expansion, the engine resolves the user's OU containment chain and collects inherited policies:
 
@@ -766,7 +766,7 @@ Notes:
 * `block_inheritance` and `enforced` flags are reserved (see 5.7.2) and not applied in v1; ancestors always contribute.
 * OUs are never used as `principal_type` in resource grants.
 
-### **9.1.2 Manager Chain Resolution**
+### 9.1.2 Manager Chain Resolution
 
 The engine walks `report_to_user_id` upward to populate `${requester.manager_chain}`:
 
@@ -774,7 +774,7 @@ The engine walks `report_to_user_id` upward to populate `${requester.manager_cha
 * Cycles are impossible by write-time invariant (see 5.7.3) and treated as fail-closed if encountered at read time.
 * `${requester.direct_report_ids}` is resolved on demand only when a rule explicitly references it, via the direct-report reverse lookup.
 
-### **9.2 Effective Policy Collection**
+### 9.2 Effective Policy Collection
 
 For each request, the engine assembles the set of policies that apply to the requester:
 
@@ -796,19 +796,19 @@ For each request, the engine assembles the set of policies that apply to the req
 
 The result is a flat, de-duplicated set of policies, each carrying one or more statements.
 
-### **9.3 Statement Flattening & Pre-Filter**
+### 9.3 Statement Flattening & Pre-Filter
 
 Statements from all collected policies are flattened into one list. The engine pre-filters statements by:
 
 * `schema` matching the target schema, and
 * `ops` containing the requested operation.
 
-Non-matching statements are dropped before condition evaluation. The remaining set is the **candidate set** for the current request.
+Non-matching statements are dropped before condition evaluation. The remaining set is the candidate set for the current request.
 
 > [!NOTE]
 > Physical projections such as the `resource_grant` index may short-circuit the pre-filter for hot-path lookups (e.g., `read` on a known `resource_id`). They must not produce decisions that differ from evaluating the full candidate set.
 
-### **9.4 Context Expansion**
+### 9.4 Context Expansion
 
 Before evaluating a rule, the engine replaces placeholders:
 
@@ -822,26 +822,26 @@ Before evaluating a rule, the engine replaces placeholders:
 
 with real values.
 
-**Example — A user can read rows owned by anyone in their OU subtree:**
+Example, a user can read rows owned by anyone in their OU subtree:
 
 ```json
 { "a": "owner.ou_path", "v": "starts_with:${requester.ou_path}" }
 ```
 
-**Example — A manager can read rows owned by anyone in their reporting chain:**
+Example, a manager can read rows owned by anyone in their reporting chain:
 
 ```json
 { "a": "owner.user_id", "v": "in:${requester.direct_report_ids}" }
 ```
 
-### **9.5 Condition Evaluation**
+### 9.5 Condition Evaluation
 
 The rule logic (l/c) is evaluated against:
 
 * EAV attributes of the target entity (row-level rules)
 * The attribute names being accessed (column-level rules)
 
-**Example:**
+Example:
 
 ```json
 { "a": "project_team", "v": "equals:${requester.role_ids}" }
@@ -851,11 +851,11 @@ evaluates whether the requester's roles include the team of the project.
 
 Unresolved placeholders or invalid policy expressions must fail closed.
 
-### **9.6 Conflict Resolution**
+### 9.6 Conflict Resolution
 
 Multiple candidate statements may match the same row or attribute. Combination follows two ordered rules:
 
-1. **Deny overrides Allow.** If any matching statement has `effect=deny` for the requested `(ops, row)`, the access is denied — even if other statements would allow it.
+1. **Deny overrides Allow.** If any matching statement has `effect=deny` for the requested `(ops, row)`, the access is denied, even if other statements would allow it.
 2. **Mask overrides Allow.** If a row passes `allow` row-scope but a `mask` statement matches the row and a target attribute, that attribute is masked (suppressed or substituted per `outcome.action`).
 
 Effective decision per row `r` and operation `op`:
@@ -877,14 +877,14 @@ else:
 Notes:
 
 * Statement ordering inside a single policy is not significant; precedence is fully determined by `effect`.
-* `allow` statements with different selectors **union** their row scopes.
-* `deny` statements with different selectors **union** their excluded row scopes (a row is denied if any deny matches).
-* `mask` statements with different `outcome.attrs` **union** their masked attribute sets.
-* OU-inherited, role-inherited, and user-direct statements participate equally — there is no precedence based on attachment surface.
+* `allow` statements with different selectors union their row scopes.
+* `deny` statements with different selectors union their excluded row scopes (a row is denied if any deny matches).
+* `mask` statements with different `outcome.attrs` union their masked attribute sets.
+* OU-inherited, role-inherited, and user-direct statements participate equally; there is no precedence based on attachment surface.
 
 ---
 
-## **10. Query Filtering & Enforcement**
+## 10. Query Filtering & Enforcement
 
 Current data-plane enforcement pushes grant-derived conditions into Forma query conditions.
 
@@ -909,21 +909,21 @@ Column/attribute filters involve checking which fields should be returned or mas
 
 ---
 
-## **11. AI Agent Safety**
+## 11. AI Agent Safety
 
 To defend against prompt injection and unintended privilege escalation:
 
-* Policies must be **defined statically in policy storage**
-* Agents may request data but **cannot contribute statements, conditions, or selectors**
+* Policies must be defined statically in policy storage
+* Agents may request data but cannot contribute statements, conditions, or selectors
 * Statement evaluation must be deterministic and safe
 * Variables like `${…}` are expanded only server-side
 * Invalid policy payloads are denied by default (fail-closed)
 
-This ensures that agents *never generate policy conditions* but only request actions against enforced policies.
+Agents never generate policy conditions; they only request actions against enforced policies.
 
 ---
 
-## **12. Accounting & Auditing**
+## 12. Accounting & Auditing
 
 Authorization-relevant decisions should be logged:
 
@@ -946,19 +946,17 @@ This supports compliance and incident investigation.
 
 ---
 
-## **13. Summary**
+## 13. Summary
 
 The LTBase AAA framework:
 
-* Cleanly separates **Authentication**, **Identity Binding**, and **Authorization**
+* Separates Authentication, Identity Binding, and Authorization
 * Supports enterprise onboarding models with social login only
-* Provides **policy-driven identity binding** for invitations, whitelists, and approvals
-* Uses a single **unified policy model** — every authorization decision is expressed as `statements` (allow / deny / mask) inside `policy_profile`, attached to user / role / OU
-* Combines statements with **deny-overrides** and **mask-overrides-allow** precedence; fail-closed by default
-* Models the **organizational chart** (OU containment + manager relationship) in an Active Directory–faithful way, with policy inheritance down the OU subtree
+* Provides policy-driven identity binding for invitations, whitelists, and approvals
+* Uses a single unified policy model: every authorization decision is expressed as `statements` (allow / deny / mask) inside `policy_profile`, attached to user / role / OU
+* Combines statements with deny-overrides and mask-overrides-allow precedence; fail-closed by default
+* Models the organizational chart (OU containment + manager relationship) in an Active Directory-faithful way, with policy inheritance down the OU subtree
 * Expands roles hierarchically and combines user / role / OU principals into a single evaluator
 * Retains hot-path projections (e.g., `resource_grant` index) as an internal optimization, not a separate logical concept
 * Ensures AI agent safety
-* Generates complete audit trails
-
-This design positions LTBase as an **AI-native, enterprise-ready BaaS platform**.
+* Generates audit trails
