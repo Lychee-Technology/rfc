@@ -2,7 +2,7 @@
 
 本文档说明 `cmd/controlplane` 当前已经实现的 REST 管理接口，用于私有化单部署场景下的 AAA 与组织架构管理。
 
-如果你要通过 AWS Lambda Console Test、CLI 工具、或直接 Lambda Invoke 调用旧的 action 风格接口，请看 `docs/control-plane-cli.md`。这两套接口并存，但用途不同：
+如果要通过 AWS Lambda Console Test、CLI 工具或直接 Lambda Invoke 调用旧的 action 风格接口，请看 `docs/control-plane-cli.md`。这两套接口并存，但用途不同：
 
 - REST Admin API：给管理后台、自动化脚本、运维集成使用
 - Action API：给 Lambda Console / CLI 运维动作与兼容旧流程使用
@@ -85,7 +85,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 
 ## 4. 已实现接口
 
-以下内容按当前代码实现整理，而不是按设计 spec 的理想目标整理。
+以下内容按当前代码实现整理，不是按设计 spec 的目标整理。
 
 ### 4.1 Auth Config Snapshot
 
@@ -105,12 +105,12 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 - legacy permission 数据只存在于内部存储和迁移输出，不通过 REST bootstrap snapshot 泄露到公共 DTO
 - 新 REST Admin API 不提供 `/api/v1/auth/permissions` 资源；permission 为首的概念只在 action API 的 legacy 运维操作和迁移输出中出现
 - `GET /api/v1/auth/config` 返回 `data.authorization_model` 字段，描述 canonical policy-permission 关系：
-  - `canonical_object`: `"policy"` — 规范授权对象（对应 `policy_profile` 实体）
-  - `canonical_principal_relationship`: `"principal_policy_attachment"` — 规范主体绑定关系
-  - `canonical_org_relationship`: `"ou_policy_attachment"` — 规范组织绑定关系
-  - `permission_status`: `"legacy_compatibility"` — permission 概念为 legacy 兼容面
-  - `legacy_data_location`: `"internal_or_migration_output_only"` — legacy permission 数据仅在内部存储和迁移输出中出现
-  - `policy_depends_on_permission`: `false` — policy 独立存在，不依赖 permission
+  - `canonical_object`: `"policy"`，规范授权对象（对应 `policy_profile` 实体）
+  - `canonical_principal_relationship`: `"principal_policy_attachment"`，规范主体绑定关系
+  - `canonical_org_relationship`: `"ou_policy_attachment"`，规范组织绑定关系
+  - `permission_status`: `"legacy_compatibility"`，permission 概念为 legacy 兼容面
+  - `legacy_data_location`: `"internal_or_migration_output_only"`，legacy permission 数据仅在内部存储和迁移输出中出现
+  - `policy_depends_on_permission`: `false`，policy 独立存在，不依赖 permission
 
 ### 4.2 Auth Users
 
@@ -132,7 +132,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 说明：
 
 - `PATCH` 只支持管理员维护组织相关元数据
-- provider identity 字段不是这个接口的写入目标
+- 该接口不写入 provider identity 字段
 
 ### 4.3 Auth Roles
 
@@ -176,7 +176,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 
 `GET` 返回 `"items"` 数组，每项包含 `principal_type`、`principal_id`、`policy_id` 和内嵌 `policy` 对象。
 
-当前允许的 `principal_type` 实现面向：
+当前实现允许的 `principal_type`：
 
 - `user`
 - `role`
@@ -346,7 +346,7 @@ REST Admin API 的管理类接口需要 admin policy 绑定。
 - role / policy create body 目前不接收 spec 示例中的显式 ID 字段，而是服务端生成
 - authservice 仍然负责登录、binding、token issuance，不属于 control-plane REST admin API
 
-如果你在做前端或自动化集成，请以当前实现为准，不要直接假设 spec 中所有目标接口都已落地。
+做前端或自动化集成时请以当前实现为准，不要假设 spec 中所有目标接口都已落地。
 
 ## 7. 验证建议
 

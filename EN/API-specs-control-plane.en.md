@@ -21,21 +21,21 @@ This document covers the `/api/v1/org/...` routes, the operational/catalog route
 
 How routes are served:
 
-- Every REST route is mounted under **two prefixes**: `/api/v1/...` and `/api/control-plane/v1/...` (`routemanifest.ControlPlanePrefixes`). Both prefixes behave identically.
-- The route table (`ControlPlaneRouteSuffixes` in `internal/routemanifest/controlplane.go`) is a load-bearing allowlist: any request whose `METHOD /path` does not match a table entry returns `404` — after authorization.
+- Every REST route is mounted under two prefixes: `/api/v1/...` and `/api/control-plane/v1/...` (`routemanifest.ControlPlanePrefixes`). Both prefixes behave identically.
+- The route table (`ControlPlaneRouteSuffixes` in `internal/routemanifest/controlplane.go`) is a load-bearing allowlist: any request whose `METHOD /path` does not match a table entry returns `404`, after authorization.
 
 Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go` and `API-specs-authservice.en.md`); the control plane serves the admin surface described in this document and `API-specs-control-plane-service-auth-routes.en.md`. The two route sets do not overlap.
 
-## 2. Authentication, Scope, and Shared Conventions
+## 2. Authentication, scope, and shared conventions
 
-### 2.1 Admin Authentication
+### 2.1 Admin authentication
 
-The control-plane admin REST API uses Bearer JWT authentication, with authorization based on an **admin policy binding** (`api_authorizer.go`):
+The control-plane admin REST API uses Bearer JWT authentication, with authorization based on an admin policy binding (`api_authorizer.go`):
 
 - A request with no JWT claims returns `401 unauthorized`.
-- Access is granted when the caller (the user resolved from the JWT subject) holds — via `principal_policy_attachment`, directly or indirectly through a role — the policy whose **slug is `admin.controlplane`**.
+- Access is granted when the caller (the user resolved from the JWT subject) holds the policy whose slug is `admin.controlplane`, via `principal_policy_attachment`, either directly or indirectly through a role.
 - When no policy in the project carries that slug yet (e.g. a deployment that predates slug backfill), the authorizer falls back to the legacy policy id `generated#permission#controlplane.admin` (emitted by the legacy migration).
-- The check does not inspect role slugs and does not inspect the policy document's contents — it is a single binding-based grant.
+- The check does not inspect role slugs and does not inspect the policy document's contents; it is a single binding-based grant.
 
 Unauthenticated requests return:
 
@@ -57,7 +57,7 @@ Authenticated requests without the admin policy return:
 }
 ```
 
-**Relaxed authorization for org reads**: `GET /api/v1/org/...` (including `/org/charts`) uses a looser org-read authorizer: either an admin **or** any referral-bound user (a bound user with a non-empty `referral_code`) may read. All other callers receive:
+Relaxed authorization for org reads: `GET /api/v1/org/...` (including `/org/charts`) uses a looser org-read authorizer, where either an admin or any referral-bound user (a bound user with a non-empty `referral_code`) may read. All other callers receive:
 
 ```json
 {
@@ -67,11 +67,11 @@ Authenticated requests without the admin policy return:
 }
 ```
 
-All org writes (POST/PATCH/PUT/DELETE) still require admin. Unknown routes 404 **after** authorization, so the route table cannot be probed with unauthorized requests.
+All org writes (POST/PATCH/PUT/DELETE) still require admin. Unknown routes 404 after authorization, so the route table cannot be probed with unauthorized requests.
 
-**The one exception: CORS preflight.** Any `OPTIONS` request returns `204 No Content` **before** authorization and route matching (CORS headers only, no body — and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
+The one exception is CORS preflight. Any `OPTIONS` request returns `204 No Content` before authorization and route matching (CORS headers only, no body, and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
 
-### 2.2 Project Scope
+### 2.2 Project scope
 
 LTBase currently supports single-project private deployment for the control plane.
 
@@ -81,7 +81,7 @@ Therefore:
 - clients must not provide `project_id` in the path, query, headers, or request body (exception: the `/repair/*` body may carry an explicit `project_id`, which must parse as a valid UUID; it should normally be omitted so the deployment project is used)
 - the server may return `project_id` as read-only metadata in responses
 
-### 2.3 Success and Error Envelopes
+### 2.3 Success and error envelopes
 
 Every response carries a top-level `request_id`.
 
@@ -121,7 +121,7 @@ Error shape:
 
 Optional field-level or validation diagnostics may be returned as `details` (e.g. `details.field = "data"` on catalogs PUT validation failures).
 
-### 2.4 Common Status Codes
+### 2.4 Common status codes
 
 - `200 OK`
 - `201 Created`
@@ -133,9 +133,9 @@ Optional field-level or validation diagnostics may be returned as `details` (e.g
 - `409 Conflict`
 - `500 Internal Server Error`
 
-## 3. Route Summary
+## 3. Route summary
 
-### 3.1 Admin REST Routes
+### 3.1 Admin REST routes
 
 All routes below are implemented and registered in the current code (each is mounted under both the `/api/v1` and `/api/control-plane/v1` prefixes).
 
@@ -173,7 +173,7 @@ Operational and catalog routes:
 | GET / PUT | `/api/v1/compliance-profile` | Read / write the compliance profile |
 | GET | `/api/v1/workflows` | List workflow definitions (dev-only, see §7.5) |
 
-### 3.2 `/control-plane` Actions
+### 3.2 `/control-plane` actions
 
 The following are provided as operational actions through `POST /control-plane` (or direct Lambda invoke). Complete list (`main.go` dispatch):
 
@@ -190,7 +190,7 @@ The following are provided as operational actions through `POST /control-plane` 
 - `put-project-assistant-role-catalog` / `get-project-assistant-role-catalog`
 - `import-referrals`
 
-### 3.3 REST ↔ Action Mapping Summary
+### 3.3 REST ↔ action mapping summary
 
 | REST API | `/control-plane` action | CLI (`cmd/tools`) |
 |---|---|---|
@@ -206,13 +206,13 @@ The following are provided as operational actions through `POST /control-plane` 
 Notes:
 
 - (*) `create-iam-authz-records` is a lower-level batch seed action. The REST `POST /api/v1/auth/policies` auto-generates a durable `policy_id`; `create-iam-authz-records` requires the caller to supply `policy_id` explicitly. The action is suitable for seeding, migration, and operational bulk writes, while the REST endpoint is the productized admin contract.
-- The `cmd/tools` CLI currently exposes only `ensure-project`, `repair-project`, and `update-schema`. It does **not** expose a policy or referral management subcommand. Use the Control Plane Lambda action API or the HTTP REST API for those workflows.
+- The `cmd/tools` CLI currently exposes only `ensure-project`, `repair-project`, and `update-schema`. It does not expose a policy or referral management subcommand. Use the Control Plane Lambda action API or the HTTP REST API for those workflows.
 - `list-project-auth-config` returns the full project auth snapshot (users, roles, policies, binding policies, referrals, attachments, and warnings), which is broader than `GET /api/v1/auth/policies`.
 - `ensure-project`, `update-schema`, and `migrate-authz-*` have no REST equivalents and remain action-only.
 
-### 3.4 Built-in Resources
+### 3.4 Built-in resources
 
-The control plane manages a fixed set of **built-in resources**. These are administered through their own REST endpoints and `/control-plane` actions — they are **not** authz policy `schema` targets, and you do not grant access to them by writing policy statements (e.g. there is no `schema: "users"` or `schema: "org_units"` statement). Control-plane-wide admin is a single binding-based grant: the `admin.controlplane` policy attached to a principal (see §8.2).
+The control plane manages a fixed set of built-in resources. These are administered through their own REST endpoints and `/control-plane` actions; they are not authz policy `schema` targets, and access to them is not granted by writing policy statements (e.g. there is no `schema: "users"` or `schema: "org_units"` statement). Control-plane-wide admin is a single binding-based grant: the `admin.controlplane` policy attached to a principal (see §8.2).
 
 Each concept is named consistently per layer (the same resource may appear with a different spelling in a REST route vs. a JSON field vs. an action `kind`):
 
@@ -230,16 +230,16 @@ Each concept is named consistently per layer (the same resource may appear with 
 
 Notes:
 
-- **"Org chart" is a concept word, not a resource name.** The data model is **org units** (`org_units` / OU). The hierarchy is encoded with `parent_ou_id` and a materialized `ou_path`; `/api/v1/org/charts` is only a read-only rendering of that tree. See `aaa.md` §5.7.
+- "Org chart" is a concept word, not a resource name. The data model is org units (`org_units` / OU). The hierarchy is encoded with `parent_ou_id` and a materialized `ou_path`; `/api/v1/org/charts` is only a read-only rendering of that tree. See `aaa.md` §5.7.
 - Org units and OU-policy attachments are managed only via the `/api/v1/org/...` REST endpoints; there is no `create-iam-authz-records` `kind` for them.
 
-## 4. Common Data Structures
+## 4. Common data structures
 
 In stored records and responses, `policy_id` and `role_id` are the server-generated
 UUIDv7 durable identifiers (defined by the auth service); the readable `slug` is a
 convenience key that callers may use to reference an entity in requests. `ou_id`
 and `user_id` are caller/identity-supplied. The caller-supplied `policy_id`/`role_id`
-in `create-iam-authz-records` action payloads (§8.2) are the exception — that action
+in `create-iam-authz-records` action payloads (§8.2) are the exception: that action
 requires the caller to provide the durable id explicitly.
 
 ### 4.1 ControlPlaneUser (public DTO)
@@ -260,7 +260,7 @@ The user object shape returned by the org and auth REST routes (`apiPublicAuthUs
 }
 ```
 
-Note: the public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (the snapshot-specific shape is documented in `API-specs-control-plane-service-auth-routes.en.md` §5).
+Note: the public DTO does not include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (the snapshot-specific shape is documented in `API-specs-control-plane-service-auth-routes.en.md` §5).
 
 ### 4.2 OrgUnit
 
@@ -300,7 +300,7 @@ The full shape returned by `GET /api/v1/org/units/{ou_id}/policies` (with a nest
 
 The variant used in org-chart responses and PUT attach responses omits the nested `policy` and contains only `ou_id`, `policy_id`, `enforced`, `created_at`, `updated_at`.
 
-### 4.4 Manager Relationship
+### 4.4 Manager relationship
 
 Manager relationships are no longer returned as flat fields; the response carries a pair of full user objects:
 
@@ -329,7 +329,7 @@ Notes:
 - `policy_attachments` is the org-chart read-model field name; items look like `{ "ou_id": "...", "policy_id": "...", "enforced": false, "created_at": ..., "updated_at": ... }` (no nested policy).
 - This differs intentionally from the auth-config snapshot field `ou_policy_attachments`, because the org-chart response is a UI-oriented aggregate read model rather than a direct snapshot dump.
 
-## 5. Org Chart Semantics And Invariants
+## 5. Org chart semantics and invariants
 
 The org chart model follows two independent relationships:
 
@@ -348,7 +348,7 @@ V1 rules:
 - OU-wide authorization flows through OU policy attachments
 - `block_inheritance` and `enforced` are accepted and stored for forward compatibility, but V1 runtime evaluation still behaves as simple ancestor-union inheritance
 
-## 6. Org Chart APIs
+## 6. Org chart APIs
 
 Implementation status: all routes are landed in the current code (`cmd/controlplane/api_org.go`).
 
@@ -361,7 +361,7 @@ Error code conventions (shared by the org routes):
 - `405 method_not_allowed`: path exists but method is not supported
 - read-path store failures return `500` with codes such as `list_org_units_failed`, `get_org_unit_failed`
 
-### 6.1 Org Units
+### 6.1 Org units
 
 #### `GET /api/v1/org/units`
 
@@ -490,7 +490,7 @@ Response (`200`):
 
 Conflict responses return `409 ou_not_empty`.
 
-### 6.2 Org Unit Users And Policies
+### 6.2 Org unit users and policies
 
 #### `GET /api/v1/org/units/{ou_id}/users`
 
@@ -715,7 +715,7 @@ Response: `items` is an array of full ControlPlaneUser objects:
 
 Cycle protection errors return `409 invalid_org_cycle`.
 
-### 6.4 Org Chart Read Model
+### 6.4 Org chart read model
 
 #### `GET /api/v1/org/charts`
 
@@ -746,9 +746,9 @@ This endpoint is read-only. All writes still go through the resource endpoints a
 Field notes:
 
 - The top-level org-chart field is `policy_attachments`; items are `{ "ou_id", "policy_id", "enforced", "created_at", "updated_at" }` (no nested policy).
-- For authorization this is an org read route — referral-bound users may access it (see §2.1).
+- For authorization this is an org read route, so referral-bound users may access it (see §2.1).
 
-## 7. Operational And Catalog REST Routes
+## 7. Operational and catalog REST routes
 
 Implementation status: all landed in the current code.
 
@@ -841,7 +841,7 @@ The three catalog sub-resources share one contract: `capabilities`, `action-temp
 
 #### `GET /api/v1/catalogs/{capabilities|action-templates|assistant-roles}`
 
-Response (note: **not** a `data` envelope — `project_id` is top-level):
+Response (not a `data` envelope: `project_id` is top-level):
 
 ```json
 {
@@ -851,7 +851,7 @@ Response (note: **not** a `data` envelope — `project_id` is top-level):
 }
 ```
 
-`data` is the catalog JSON stored verbatim. `assistant-roles` returns the default `{"version":1,"roles":[]}` (`200`) when no record exists yet — not a 404.
+`data` is the catalog JSON stored verbatim. When no record exists yet, `assistant-roles` returns the default `{"version":1,"roles":[]}` with `200`, not a 404.
 
 #### `PUT /api/v1/catalogs/{capabilities|action-templates|assistant-roles}`
 
@@ -866,7 +866,7 @@ Error codes:
 
 The capability catalog validation checks entity references against the known entity schema names in the schema registry.
 
-### 7.4 Compliance Profile
+### 7.4 Compliance profile
 
 #### `GET /api/v1/compliance-profile` / `PUT /api/v1/compliance-profile`
 
@@ -876,7 +876,7 @@ Same contract as the catalogs: GET returns `{"request_id", "project_id", "data"}
 
 #### `GET /api/v1/workflows`
 
-Purpose: List workflow definition summaries. **This is a local-testing / development route**: the data comes from local JSON definition files (`LTBASE_LOCAL_TESTING_WORKFLOW_DEFINITION_PATHS` or built-in candidate paths); there is no database backing, and production deployments typically return an empty list.
+Purpose: List workflow definition summaries. This is a local-testing / development route: the data comes from local JSON definition files (`LTBASE_LOCAL_TESTING_WORKFLOW_DEFINITION_PATHS` or built-in candidate paths); there is no database backing, and production deployments typically return an empty list.
 
 Response:
 
@@ -893,13 +893,9 @@ Response:
 }
 ```
 
-## 8. `/control-plane` Action API Notes
+## 8. `/control-plane` action API notes
 
-The admin REST API does not replace the existing action-style control-plane API.
-
-Use the REST admin API for productized admin UI and automation.
-
-Use `/control-plane` for Lambda Console style operations, CLI workflows, and backend operational tasks.
+The admin REST API does not replace the existing action-style control-plane API. Use the REST admin API for productized admin UI and automation, and `/control-plane` for Lambda Console style operations, CLI workflows, and backend operational tasks.
 
 In particular:
 
@@ -907,7 +903,7 @@ In particular:
 - `migrate-authz-policy-model` and `migrate-authz-resource-identity` are operational actions, not `/api/v1/...` REST endpoints
 - the admin REST contract is resource-oriented, while `/control-plane` is action-oriented
 
-### 8.1 Common Request Fields
+### 8.1 Common request fields
 
 All `/control-plane` actions share the following top-level JSON fields (`ControlPlaneRequest`):
 
@@ -939,7 +935,7 @@ Purpose: Bulk-create IAM/authz records (role profiles, policy profiles, principa
 
 This is a lower-level seed/migration action. For the productized policy management contract, use `POST /api/v1/auth/policies` (see `API-specs-control-plane-service-auth-routes.en.md`).
 
-**Supported `kind` values:**
+Supported `kind` values:
 
 | Kind | Required fields | Purpose |
 |---|---|---|
@@ -948,7 +944,7 @@ This is a lower-level seed/migration action. For the productized policy manageme
 | `principal_policy_attachment` | `principal_type`, `principal_id`, `policy_id` | Attach a policy to a user or role |
 | `user_role_attachment` | `user_id`, `role_id` | Assign a role to a user |
 
-**Example: policy profile**
+Example of a policy profile:
 
 ```json
 {
@@ -987,7 +983,7 @@ This is a lower-level seed/migration action. For the productized policy manageme
 | `external_key` | string | no | External reference key |
 | `policy_document` | JSON object or JSON string | no | Policy statements; see `rfc/EN/aaa.md` §6 |
 
-**Example: role profile with principal-policy attachment**
+Example of a role profile with a principal-policy attachment:
 
 ```json
 {
@@ -1010,7 +1006,7 @@ This is a lower-level seed/migration action. For the productized policy manageme
 }
 ```
 
-**Result shape:**
+Result shape:
 
 ```json
 {
@@ -1029,12 +1025,12 @@ Notes:
 - The `force` flag allows overwriting existing records.
 - `dry_run` returns counts (`dry_run_insert` / `dry_run_overwrite`) without writing.
 - A `policy_profile` write triggers an automatic semantic project reseed.
-- Unlike `POST /api/v1/auth/policies`, this action does **not** generate a `policy_id`; the caller provides it.
-- The action stores `policy_document` verbatim (validated only as well-formed JSON, then compacted); it does **not** validate the document's internal shape. The canonical statement schema is defined in `rfc/EN/aaa.md` §6, which is authoritative.
+- Unlike `POST /api/v1/auth/policies`, this action does not generate a `policy_id`; the caller provides it.
+- The action stores `policy_document` verbatim (validated only as well-formed JSON, then compacted); it does not validate the document's internal shape. The canonical statement schema is defined in `rfc/EN/aaa.md` §6, which is authoritative.
 - An empty `data` array is an error (`data cannot be empty`). Duplicate logical keys inside one batch fail with `duplicated logical item key`.
 - Error codes: validation failure → `400 invalid_iam_authz_data`; existing-record conflict → `409 iam_authz_record_conflict`; otherwise → `500 create_iam_authz_records_failed`.
 
-**Example: Creating a Control Plane Admin Policy and Binding to a User**
+Example of creating a control plane admin policy and binding it to a user:
 
 The Control Plane Admin API requires the caller to hold an admin policy. The `slug` must be `admin.controlplane`; the control-plane authorizer resolves the slug to the durable policy ID. The legacy migration ID `generated#permission#controlplane.admin` is only a compatibility fallback.
 
@@ -1063,7 +1059,7 @@ The Control Plane Admin API requires the caller to hold an admin policy. The `sl
 }
 ```
 
-The admin policy's `policy_document` content is not inspected by the control-plane admin authorization check; the sole authorization path is through a `principal_policy_attachment` binding the admin policy to the user (or indirectly via a role — attach the policy to a role, then assign the role to the user). An empty `statements` list is therefore sufficient. Control-plane admin is a single binding-based grant, not a per-resource op: `controlplane` is not an entity schema and `admin` is not a valid op — entity statements scope an entity via `schema` with a `selector`, and ops are limited to `create` / `read` / `update` / `delete` / `*` (see `aaa.md` §6).
+The admin policy's `policy_document` content is not inspected by the control-plane admin authorization check; the sole authorization path is through a `principal_policy_attachment` binding the admin policy to the user (or indirectly via a role: attach the policy to a role, then assign the role to the user). An empty `statements` list is therefore sufficient. Control-plane admin is a single binding-based grant rather than a per-resource op: `controlplane` is not an entity schema and `admin` is not a valid op. Entity statements scope an entity via `schema` with a `selector`, and ops are limited to `create` / `read` / `update` / `delete` / `*` (see `aaa.md` §6).
 
 If an admin already exists via the REST Admin API, you can also bind using the REST endpoint: `PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`, where `admin.controlplane` is resolved as a slug to the durable policy ID.
 
@@ -1073,7 +1069,7 @@ Purpose: Import one or more referral codes into a project, optionally with a bou
 
 This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST API (see `API-specs-control-plane-service-auth-routes.en.md`).
 
-**Batch mode** (via `data` array):
+Batch mode (via `data` array):
 
 ```json
 {
@@ -1101,7 +1097,7 @@ This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST AP
 | `expires_at_ms` | int64 or numeric string | no | Expiration in epoch milliseconds. Omitting, `0`, or empty means never expires. |
 | `project_id` | UUID string | no | Per-item project ID; if present it must equal the top-level `project_id`, otherwise the request fails. |
 
-**Single-item mode** (without `data`, using top-level fields):
+Single-item mode (without `data`, using top-level fields):
 
 ```json
 {
@@ -1113,7 +1109,7 @@ This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST AP
 }
 ```
 
-**Response (`201`):**
+Response (`201`):
 
 ```json
 {
@@ -1129,8 +1125,8 @@ This action corresponds to `POST /api/v1/auth/referrals?import=1` in the REST AP
 
 Behavior notes:
 
-- Existing referral codes are **skipped** (conditional write) and counted as `skipped_existing`.
-- `policy_id` is validated at write time, but the error code differs between the two entry points: the REST endpoints (`POST /api/v1/auth/referrals` and `?import=1`) translate an unknown policy to `400 policy_not_found`; this action does **not** perform that translation — an unknown policy is returned together with all other import failures as `500 import_referrals_failed` (the underlying cause appears in the error message).
+- Existing referral codes are skipped (conditional write) and counted as `skipped_existing`.
+- `policy_id` is validated at write time, but the error code differs between the two entry points: the REST endpoints (`POST /api/v1/auth/referrals` and `?import=1`) translate an unknown policy to `400 policy_not_found`; this action does not perform that translation, and an unknown policy is returned together with all other import failures as `500 import_referrals_failed` (the underlying cause appears in the error message).
 - When `policy_id` is a slug, it is resolved to the durable `policy_id` before persistence.
 - Omitting `policy_id` preserves legacy binding behavior (no automatic policy attachment on identity binding).
 - On the REST referral resource, `PATCH /api/v1/auth/referrals/{code}` accepts only `expires_at_ms`; `policy_id` is not an accepted PATCH field and is silently ignored (not rejected). Treat the binding as effectively immutable after creation.

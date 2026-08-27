@@ -1,12 +1,12 @@
 # LTBase Operational Ontology RFC
 
-> **Implementation status (2026-06-09):** The ontology read API surface proposed in section 6 is implemented and documented at `ltbase.api/docs/ontology-api.md`. All nine routes (object types, link types, action types, object instances, search, reachable, actions, provenance) are available under `/api/sys/v1/ontology`. The implementation is a read adapter over existing semantic and Forma layers — no second graph database was introduced.
+> **Implementation status (2026-06-09):** The ontology read API surface proposed in section 6 is implemented and documented at `ltbase.api/docs/ontology-api.md`. All nine routes (object types, link types, action types, object instances, search, reachable, actions, provenance) are available under `/api/sys/v1/ontology`. The implementation is a read adapter over existing semantic and Forma layers. No second graph database was introduced.
 
 ## 1. Overview
 
 This document proposes an ontology-first semantic layer for LTBase.
 
-The goal is not to copy Palantir Foundry product-for-product. The goal is to give LTBase a stable business-semantic model that sits above raw schemas, APIs, and execution traces so that:
+LTBase does not aim to copy Palantir Foundry product-for-product. The goal is to give LTBase a stable business-semantic model that sits above raw schemas, APIs, and execution traces so that:
 
 - applications reason about business objects instead of storage details
 - policies and action planning bind to the same shared semantic model
@@ -21,7 +21,7 @@ In this RFC, "ontology" means the business-facing semantic layer of LTBase:
 - policy bindings
 - provenance bindings
 
-## 2. Why LTBase Needs This Layer
+## 2. Why LTBase needs this layer
 
 LTBase already has several pieces of a semantic system:
 
@@ -40,13 +40,13 @@ Without an ontology-first design, LTBase risks three problems:
 2. `lineage` keeps absorbing business relationships that should belong to object/link modeling.
 3. agent planning, permissions, and future UI surfaces end up coupling to implementation details instead of object semantics.
 
-## 3. Design Principles
+## 3. Design principles
 
-### 3.1 Model Reality, Not Storage
+### 3.1 Model reality, not storage
 
 Ontology types should represent business objects such as `lead`, `account`, `invoice`, or `deployment`, not technical tables, CDC rows, or Lambda handlers.
 
-### 3.2 Keep Ontology Separate From Provenance
+### 3.2 Keep ontology separate from provenance
 
 Ontology answers:
 
@@ -63,7 +63,7 @@ Lineage answers:
 
 The two systems must join cleanly, but they should not collapse into one abstraction.
 
-### 3.3 Reuse Existing LTBase Assets
+### 3.3 Reuse existing LTBase assets
 
 The ontology should be built from existing LTBase sources of truth wherever possible:
 
@@ -73,7 +73,7 @@ The ontology should be built from existing LTBase sources of truth wherever poss
 - policy documents for governance constraints
 - change log and lineage capture for provenance
 
-### 3.4 API-First Before UI-First
+### 3.4 API-first before UI-first
 
 LTBase should not begin by cloning Foundry Object Views or Workshop.
 
@@ -86,9 +86,9 @@ Version 1 should expose:
 
 Any richer application surface can be built on top later.
 
-## 4. Core Ontology Model
+## 4. Core ontology model
 
-### 4.1 Object Types
+### 4.1 Object types
 
 An `ObjectType` is the stable semantic definition of a business object.
 
@@ -122,7 +122,7 @@ type ObjectProperty struct {
 
 `ObjectType` is business-facing. It can be derived from Forma schema, but it is not a raw dump of schema internals.
 
-### 4.2 Link Types
+### 4.2 Link types
 
 A `LinkType` defines a semantic relationship between two object types.
 
@@ -149,7 +149,7 @@ type LinkType struct {
 }
 ```
 
-### 4.3 Action Types
+### 4.3 Action types
 
 An `ActionType` is the ontology-level definition of something a user or agent can do to an object.
 
@@ -177,7 +177,7 @@ type ActionType struct {
 }
 ```
 
-### 4.4 Policy Bindings
+### 4.4 Policy bindings
 
 Policies should attach to action types and object scopes, not only to raw API routes.
 
@@ -189,7 +189,7 @@ This gives LTBase one consistent answer to:
 
 This builds on the existing entity-capability-policy graph rather than replacing it.
 
-### 4.5 Provenance Bindings
+### 4.5 Provenance bindings
 
 Lineage should attach to ontology objects through stable object references:
 
@@ -199,9 +199,9 @@ Lineage should attach to ontology objects through stable object references:
 
 This allows provenance queries to enrich object views without forcing provenance nodes to become ontology nodes.
 
-## 5. Mapping Ontology Onto Existing LTBase Systems
+## 5. Mapping ontology onto existing LTBase systems
 
-### 5.1 Forma Schema -> Object Types
+### 5.1 Forma schema -> object types
 
 Use Forma schema as the primary source for:
 
@@ -212,7 +212,7 @@ Use Forma schema as the primary source for:
 
 Current schema ingestion already extracts entity resources and cross-schema relations. That should evolve into object-type and link-type extraction instead of stopping at generic semantic resources.
 
-### 5.2 Semantic Registry -> Ontology Registry
+### 5.2 Semantic registry -> ontology registry
 
 The current `semantic_resource` and `semantic_relation` tables are a viable bootstrap layer.
 
@@ -227,7 +227,7 @@ Long term:
 - either keep the generic graph tables if they remain readable and queryable
 - or split into dedicated ontology tables if the generic model starts hiding important invariants
 
-### 5.3 Capability Catalog + Planner -> Action Types
+### 5.3 Capability catalog + planner -> action types
 
 Planner inputs should resolve against `ActionType` definitions first.
 
@@ -241,7 +241,7 @@ to:
 
 This improves determinism, auditability, and permission reasoning.
 
-### 5.4 Governance Graph -> Policy Bindings
+### 5.4 Governance graph -> policy bindings
 
 The current governance model already links:
 
@@ -256,7 +256,7 @@ That should be reframed as:
 
 This keeps the graph but sharpens the semantics.
 
-### 5.5 Lineage System -> Provenance Layer
+### 5.5 Lineage system -> provenance layer
 
 The lineage RFC should remain responsible for:
 
@@ -266,18 +266,18 @@ The lineage RFC should remain responsible for:
 
 It should not become the container for all business semantics.
 
-## 6. Proposed API Surface
+## 6. Proposed API surface
 
 Version 1 should stay small.
 
-### 6.1 Ontology Read APIs
+### 6.1 Ontology read APIs
 
 - `GET /api/sys/v1/ontology/object-types`
 - `GET /api/sys/v1/ontology/object-types/{type_name}`
 - `GET /api/sys/v1/ontology/link-types`
 - `GET /api/sys/v1/ontology/action-types`
 
-### 6.2 Object Instance Resolution APIs
+### 6.2 Object instance resolution APIs
 
 - `GET /api/sys/v1/ontology/objects/{type_name}/{id}`
 - `POST /api/sys/v1/ontology/objects/{type_name}/search`
@@ -285,7 +285,7 @@ Version 1 should stay small.
 
 These may initially be thin wrappers over existing Forma and discovery infrastructure.
 
-### 6.3 Governed Action APIs
+### 6.3 Governed action APIs
 
 - `GET /api/sys/v1/ontology/objects/{type_name}/{id}/actions`
 - `POST /api/ai/v1/intent-to-action/plans`
@@ -298,19 +298,19 @@ The existing planner endpoint can remain, but internally it should resolve throu
 
 This should be implemented by joining ontology object references with lineage storage, not by exposing lineage internals as the primary interface.
 
-## 7. Data Model Guidance
+## 7. Data model guidance
 
 LTBase should distinguish three layers:
 
-### 7.1 Semantic Definition Layer
+### 7.1 Semantic definition layer
 
 Stable metadata about object types, link types, action types, and policy bindings.
 
-### 7.2 Operational Object Layer
+### 7.2 Operational object layer
 
 Actual project data instances stored through Forma and other LTBase systems.
 
-### 7.3 Provenance Layer
+### 7.3 Provenance layer
 
 Execution traces, derived-from edges, and audit references attached to objects.
 
@@ -320,36 +320,36 @@ This separation is important because:
 - object instances change constantly
 - provenance can grow very quickly and may need separate storage and archival rules
 
-## 8. Rollout Plan
+## 8. Rollout plan
 
-### Phase 1: Clarify Semantics
+### Phase 1: Clarify semantics
 
 - introduce the ontology vocabulary in RFCs
 - define object, link, action, and policy concepts
 - explicitly position lineage as provenance
 
-### Phase 2: Reframe Existing Semantic Tables
+### Phase 2: Reframe existing semantic tables
 
 - keep current tables and APIs working
 - add ontology-oriented metadata and views
 - avoid a breaking rename until behavior is stable
 
-### Phase 3: Planner and Governance Convergence
+### Phase 3: Planner and governance convergence
 
 - resolve planner candidates through ontology action types
 - bind policy evaluation to ontology actions and object scopes
 
-### Phase 4: Provenance Attachment
+### Phase 4: Provenance attachment
 
 - link lineage nodes to ontology object references
 - expose object-centric provenance queries
 
-### Phase 5: Rich Application Surfaces
+### Phase 5: Rich application surfaces
 
 - build object-centric agent experiences
 - add curated object views only after the ontology contract is stable
 
-## 9. Non-Goals
+## 9. Non-goals
 
 This RFC does not propose:
 

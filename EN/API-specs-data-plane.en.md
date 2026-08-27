@@ -31,9 +31,9 @@ For auth-service admin APIs, see `API-specs-control-plane-service-auth-routes.en
 
 For control-plane org and operational APIs, see `API-specs-control-plane.en.md`.
 
-## 2. Authentication, Context, and Shared Conventions
+## 2. Authentication, context, and shared conventions
 
-### 2.1 License Validation
+### 2.1 License validation
 
 All requests pass through license validation before reaching business routes. Unlicensed deployments return:
 
@@ -46,7 +46,7 @@ All requests pass through license validation before reaching business routes. Un
 
 Status code: `501 Not Implemented`
 
-### 2.2 JWT Claims and Trusted Context
+### 2.2 JWT claims and trusted context
 
 The server reads identity from API Gateway authorizer claims:
 
@@ -60,7 +60,7 @@ In the current implementation, many endpoints still retain `owner_id` and `proje
 - CRUD sessions and operations: `owner_id` and `project_id` are always taken from JWT claims
 - Planning: `actor_context.project_id` must match the JWT `project_id`, and `user_id` is overwritten by the server with the current JWT subject
 
-### 2.3 Header Conventions
+### 2.3 Header conventions
 
 - `Authorization`: consumed by the API Gateway JWT authorizer
 - `Accept-Encoding: gzip`: large responses may be gzip-compressed
@@ -68,14 +68,14 @@ In the current implementation, many endpoints still retain `owner_id` and `proje
 - `X-LTBASE-TZ-ID`: optional; must be a valid IANA time zone. Invalid values return `400 invalid_tz_id`
 - `Idempotency-Key`: used only by `POST /api/ai/v1/notes` for idempotent creation
 
-### 2.4 Successful Responses
+### 2.4 Successful responses
 
 - Default `Content-Type: application/json`
 - When the client declares gzip support and the payload is large, responses may include:
   - `Content-Encoding: gzip`
   - `IsBase64Encoded: true`
 
-### 2.5 Error Responses
+### 2.5 Error responses
 
 Except for a few internally delegated handlers, the top-level API consistently uses the following error shape:
 
@@ -86,7 +86,7 @@ Except for a few internally delegated handlers, the top-level API consistently u
 }
 ```
 
-### 2.6 Common Status Codes
+### 2.6 Common status codes
 
 - `200 OK`
 - `201 Created`
@@ -104,7 +104,7 @@ Except for a few internally delegated handlers, the top-level API consistently u
 - `502 Bad Gateway`
 - `503 Service Unavailable`
 
-## 3. Route Summary
+## 3. Route summary
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -161,7 +161,7 @@ Except for a few internally delegated handlers, the top-level API consistently u
 | POST | `/api/ai/v1/intent-to-action/executions` | Execute a plan step |
 | GET | `/api/ai/v1/intent-to-action/executions/{execution_id}` | Retrieve execution status |
 
-## 4. Common Data Structures
+## 4. Common data structures
 
 ### 4.1 ErrorPayload
 
@@ -442,7 +442,7 @@ Additional notes:
 - When model persistence succeeds, the response `models[]` entries include the persisted Forma `row_id`.
 - If model sync remains `pending` or no models were requested, `models[].row_id` may be absent.
 
-#### Model Data Placeholders
+#### Model data placeholders
 
 `models[].data` values may contain `${note.*}` placeholders. The server resolves them after the summary is generated and just before the note and its models are persisted to Forma. The values used (`note_id`, timestamps, summary, type, raw data) are all computed at this point.
 
@@ -466,11 +466,11 @@ Additional notes:
 
 **Effect on AI extraction schema:** When a model field uses a placeholder in the request, that field is removed from the structured output schema sent to Gemini, so the AI is not asked to generate it.
 
-**Models built entirely from placeholders:** Because placeholder fields are stripped from the AI schema (see above), a model whose fields are *all* placeholders leaves the AI nothing to extract. On the AI-extraction path this is treated as a failed extraction for that model type, and the model is **not persisted** (surfaced through the model sync status). The very-short-text path skips AI extraction and keeps request models as-is, so placeholder-only models *are* persisted there. To reliably persist a model on the AI path, include at least one non-placeholder field that the AI can extract.
+**Models built entirely from placeholders:** Because placeholder fields are stripped from the AI schema (see above), a model whose fields are *all* placeholders leaves the AI nothing to extract. On the AI-extraction path this is treated as a failed extraction for that model type, and the model is not persisted; the model sync status reports this. The very-short-text path skips AI extraction and keeps request models as-is, so placeholder-only models *are* persisted there. To reliably persist a model on the AI path, include at least one non-placeholder field that the AI can extract.
 
 **Notes:** Unrecognized placeholders remain as-is in the original string. New code should use the `${note.*}` style. Placeholders apply only to model data persistence during note creation; they do not affect summary updates or AI model configuration.
 
-#### Create-Note RAG Context
+#### Create-note RAG context
 
 When `context.rag` is `true` and the note MIME type is `text/*`, the server retrieves relevant reference material and injects it into the Gemini prompt to improve extraction quality:
 
@@ -565,7 +565,7 @@ Successful response: `204 No Content`
 
 Status codes: `204`, `400`, `404`, `500`
 
-## 6. Note Model Sync API
+## 6. Note model sync API
 
 ### 6.1 `GET /api/ai/v1/notes/{note_id}/model_sync`
 
@@ -589,7 +589,7 @@ Status codes:
 - `404`
 - `500`
 
-## 7. Deep Ping API
+## 7. Deep ping API
 
 ### `GET /api/v1/deepping`
 
@@ -613,7 +613,7 @@ Status codes: `200`, `400`, `401`, `503`
 
 ## 8. Forma API
 
-### 8.1 Purpose and Authorization
+### 8.1 Purpose and authorization
 
 Provides in-project entity CRUD, search, and complex conditional queries.
 
@@ -1013,7 +1013,7 @@ Status codes: `200`, `400 unknown_entity_type`, `500`
 
 Ontology routes are project-scoped, read-only adapters over the semantic and Forma layers. They provide an object-centric read model without introducing a second graph database.
 
-The full ontology API surface — including route list, request/response examples, error semantics, and relation to semantic, governance, discovery, planning, and Forma APIs — is documented in `ltbase.api/docs/ontology-api.md`.
+The full ontology API surface (route list, request/response examples, error semantics, and relation to the semantic, governance, discovery, planning, and Forma APIs) is documented in `ltbase.api/docs/ontology-api.md`.
 
 ## 12. Governance API
 
@@ -1069,7 +1069,7 @@ Additional governance routes cover ActionClaim lifecycle (create, approve, rejec
 
 ## 13. Discovery API
 
-### 13.1 Shared Parameters
+### 13.1 Shared parameters
 
 Discovery request bodies use the following structure:
 
@@ -1401,7 +1401,7 @@ Response: `ExecutionEnvelope`
 
 Status codes: `200`, `400 invalid_request`, `401`, `404 execution_not_found`, `409 execution_context_mismatch`, `500`
 
-## 15. Major Differences from the Older Spec
+## 15. Major differences from the older spec
 
 Compared with earlier documentation based on an older handler snapshot, the current implementation has the following major changes:
 

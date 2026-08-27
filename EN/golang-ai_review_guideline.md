@@ -1,14 +1,14 @@
 # AI Code Review Guideline (Go)
 
 ## Purpose
-Use this guideline to run high-signal, engineering-grade code reviews for Go codebases.
+Use this guideline to run high-signal code reviews for Go codebases.
 The review should combine:
 - Go idioms and conventions from Effective Go.
 - structural risk detection from refactoring.guru code smells.
 
-The goal is not stylistic perfection. The goal is to find defects, maintenance risks, and refactor opportunities with clear impact.
+The goal is to find defects, maintenance risks, and refactor opportunities with clear impact, not to achieve stylistic perfection.
 
-## Canonical References
+## Canonical references
 - Effective Go: https://go.dev/doc/effective_go
 - Refactoring Guru (Code Smells): https://refactoring.guru/refactoring/smells
 - Refactoring Guru (Couplers): https://refactoring.guru/refactoring/smells/couplers
@@ -19,7 +19,7 @@ The goal is not stylistic perfection. The goal is to find defects, maintenance r
 
 ---
 
-## 1) Review Objectives and Priorities
+## 1) Review objectives and priorities
 
 ### Primary objectives
 1. Detect correctness and behavior risks.
@@ -35,7 +35,7 @@ The goal is not stylistic perfection. The goal is to find defects, maintenance r
 
 ---
 
-## 2) Mandatory Review Output Format
+## 2) Mandatory review output format
 
 Always output findings first, sorted by severity (`P0` to `P3`).
 Each finding must include:
@@ -53,7 +53,7 @@ If no findings:
 
 ---
 
-## 3) Effective Go Review Checklist
+## 3) Effective Go review checklist
 
 Use this checklist as hard gates.
 
@@ -63,19 +63,19 @@ Use this checklist as hard gates.
 - Avoid `panic` in library/business layers; reserve for unrecoverable program startup invariants.
 - Ensure error messages include actionable context.
 - Prefer early return; avoid unnecessary `else` after `return`.
-- Prefer “handle errors first” to minimize nesting.
+- Prefer "handle errors first" to minimize nesting.
 - Flag in-band error signaling (`""`, `-1`, `nil` as hidden failure) when `(..., ok)` or `(..., error)` is clearer.
 - Check error text quality: lowercase start (except acronyms/proper nouns), no trailing punctuation.
 - Prefer modern wrapping (`fmt.Errorf("...: %w", err)`) so callers can still use `errors.Is/As`.
 
 ### 3.2 API and interface design
 - Keep interfaces small and use-case-driven.
-- Flag “fat interfaces” that force broad dependencies.
+- Flag "fat interfaces" that force broad dependencies.
 - Check whether function signatures include repeated parameter clumps.
 - Ensure constructor and function signatures match actual behavior (no ignored injected dependencies).
 - Ask only for what is needed in arguments (e.g., `io.Writer` instead of broader/concrete types).
 - Prefer synchronous APIs at boundaries; let callers choose concurrency.
-- Apply contract minimalism: “require no more, promise no less.”
+- Apply contract minimalism: "require no more, promise no less."
 - Prefer `accept interfaces, return structs` for extensibility and testability.
 - Be cautious with constructors returning interfaces by default; return interface only when abstraction boundary is intentional.
 
@@ -120,7 +120,7 @@ Use this checklist as hard gates.
 - Verify `go vet` findings are addressed or justified.
 - Verify `go fix` has been run for the target Go version to adopt available modernizations (see 3.11).
 
-### 3.10 Coupling/Cohesion and Import Graph (SOLID Go)
+### 3.10 Coupling/cohesion and import graph (SOLID Go)
 - Use objective design language in findings: `rigid`, `fragile`, `immobile`, `complex`, `verbose`.
 - Check package cohesion first (not just type-level SRP): do functions/types in a package change for one reason?
 - Check coupling via imports: each `import` is a source-level dependency.
@@ -153,7 +153,7 @@ Use this checklist as hard gates.
 
 ---
 
-## 4) Refactoring.Guru Smell-to-Go Mapping
+## 4) Refactoring.Guru smell-to-Go mapping
 
 Use smells as a risk taxonomy, not as a cosmetic checklist.
 
@@ -179,27 +179,27 @@ Use smells as a risk taxonomy, not as a cosmetic checklist.
 - Repeated concurrency orchestration in public APIs: prefer central sync contract + internal concurrency.
 - Over-reliance on inheritance-style mental model with embedding should be flagged; embedding is composition, not subtype polymorphism. Embedded methods dispatch to the inner type's receiver, and outer-type methods with the same name silently shadow them.
 
-### 4.5 Couplers Deep-Dive (from refactoring.guru/couplers)
+### 4.5 Couplers deep-dive (from refactoring.guru/couplers)
 
 #### Feature Envy
-- Definition: a method accesses another object’s data more than its own.
+- Definition: a method accesses another object's data more than its own.
 - Go indicators:
   - a function in package/type `A` repeatedly reads fields/getters from `B` and barely touches `A`.
-  - “mapper/service” methods that mostly navigate foreign structs.
+  - "mapper/service" methods that mostly navigate foreign structs.
 - Risk:
   - wrong ownership and change coupling; behavior changes in `B` force edits in `A`.
 - Preferred refactors:
   - `Move Method`
   - `Extract Method` then move extracted part
 - Review question:
-  - “Which type/package changes when this logic changes? Is the logic currently located there?”
+  - "Which type/package changes when this logic changes? Is the logic currently located there?"
 - When to ignore:
   - deliberate behavior/data separation (e.g., Strategy-like design for pluggable behavior).
 
 #### Inappropriate Intimacy
 - Definition: one class/module relies on internals of another.
 - Go indicators:
-  - direct usage of another package’s internal representation assumptions.
+  - direct usage of another package's internal representation assumptions.
   - friend-like knowledge of lifecycle/order/invariants not encoded in API.
   - persistent two-way knowledge between packages/types.
 - Risk:
@@ -225,7 +225,7 @@ Use smells as a risk taxonomy, not as a cosmetic checklist.
   - `Hide Delegate`
   - `Extract Method` + `Move Method` to the start of chain
 - Review question:
-  - “Can the first object expose intention-level behavior instead of structure traversal?”
+  - "Can the first object expose intention-level behavior instead of structure traversal?"
 - When to ignore:
   - avoid over-hiding delegates if it creates `Middle Man`.
 
@@ -239,7 +239,7 @@ Use smells as a risk taxonomy, not as a cosmetic checklist.
 - Preferred refactors:
   - `Remove Middle Man` where no boundary value exists.
 - Review question:
-  - “What concrete boundary value does this layer add (policy, security, caching, observability, compatibility)?”
+  - "What concrete boundary value does this layer add (policy, security, caching, observability, compatibility)?"
 - When to ignore:
   - intentional middle layers for dependency isolation, `Proxy`/`Decorator`, compatibility boundaries.
 
@@ -254,13 +254,13 @@ Use smells as a risk taxonomy, not as a cosmetic checklist.
   - `Introduce Foreign Method` (small extension)
   - `Introduce Local Extension` (larger wrapper/adapter)
 - Review question:
-  - “Should missing behavior be centralized as a local extension instead of repeated call-site patches?”
+  - "Should missing behavior be centralized as a local extension instead of repeated call-site patches?"
 - When to ignore:
   - local extensions increase maintenance work when upstream libraries change.
 
 ---
 
-## 5) High-Signal Heuristics for Go Reviews
+## 5) High-signal heuristics for Go reviews
 
 Use these quick detectors:
 1. Same business logic appears in multiple entrypoints (`server` vs `lambda`).
@@ -276,7 +276,7 @@ Use these quick detectors:
 11. Public API forces async/channel usage where a sync return would be simpler.
 12. Potential goroutine leak: goroutine sends/receives without cancellation/exit contract.
 13. Package-level mutable global used as hidden dependency.
-14. Functions return ambiguous in-band “error values” instead of explicit status/error.
+14. Functions return ambiguous in-band "error values" instead of explicit status/error.
 15. Repeated deep accessor chains (`a.b.c.d`) in business logic.
 16. Thin pass-through wrappers with little/no policy value.
 17. Scattered third-party library workarounds without a local extension layer.
@@ -290,7 +290,7 @@ Use these quick detectors:
 
 ---
 
-## 6) Refactor Recommendation Rules
+## 6) Refactor recommendation rules
 
 When suggesting refactors, follow these rules:
 1. Prefer incremental refactors over rewrites.
@@ -314,7 +314,7 @@ Suggested patterns:
 
 ---
 
-## 7) Test Expectations in Review
+## 7) Test expectations in review
 
 For each `P0/P1` finding, require tests covering:
 1. success path
@@ -329,7 +329,7 @@ For refactors:
 
 ---
 
-## 8) AI Reviewer Prompt Template
+## 8) AI reviewer prompt template
 
 Use this template directly:
 
@@ -378,7 +378,7 @@ Focus especially on:
 
 ---
 
-## 9) What Not to Do
+## 9) What not to do
 
 - Do not produce generic comments without file-level evidence.
 - Do not block on purely personal style preferences.
@@ -388,7 +388,7 @@ Focus especially on:
 
 ---
 
-## 10) Review Completion Checklist
+## 10) Review completion checklist
 
 Before finishing, verify:
 1. Findings are evidence-based and severity-ranked.
@@ -398,7 +398,7 @@ Before finishing, verify:
 
 ---
 
-## 11) Source-Aligned Review Questions
+## 11) Source-aligned review questions
 
 Run these questions explicitly during review:
 1. Did we handle errors first to keep happy path flat and obvious?

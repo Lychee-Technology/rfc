@@ -19,7 +19,7 @@ This runbook helps LTBase operators debug notes behavior in deployed environment
 | ModelSyncTask | DynamoDB record tracking model sync state for a note |
 | Project suffix | `UUIDToBase32(project_id)`, used to construct table names |
 
-## 1. Identifying Project Scope
+## 1. Identifying project scope
 
 LTBase currently uses a single-project-per-deployment model. Before debugging any notes issue, confirm the target project:
 
@@ -43,7 +43,7 @@ curl -H "Authorization: Bearer <admin-jwt>" \
 
 If the project is mismatched or missing, the issue is in deployment wiring or JWT issuance, not in Notes business logic.
 
-## 2. Locating a Specific User's Notes
+## 2. Locating a specific user's notes
 
 ### Recommended: Use existing Notes API
 
@@ -80,9 +80,9 @@ LIMIT 50;
 
 > **Warning**: Direct datastore queries are for read-only diagnostics only. Do not perform write operations against DSQL.
 
-## 3. Distinguishing Failure Types
+## 3. Distinguishing failure types
 
-### 3.1 Data Plane Note Creation Failure
+### 3.1 Data Plane note creation failure
 
 **Symptom**: `POST /api/ai/v1/notes` returns non-201.
 
@@ -109,7 +109,7 @@ LIMIT 50;
    - `gemini response did not contain summary text`: Gemini API returned empty
    - `insert note into dsql`: Database connection or DDL issue
 
-### 3.2 Gemini Extraction Failure
+### 3.2 Gemini extraction failure
 
 **Symptom**: Note creation succeeds (201), but `model_extraction.status = "failed"`.
 
@@ -120,9 +120,9 @@ LIMIT 50;
 - Response body `model_extraction.error` field contains a diagnostic code (e.g., `gemini_model_not_recognized`)
 - This means `model_sync.status` will be `extraction_failed` and no Forma entities were created
 
-**Recoverability**: You can update the note summary or resubmit, but this is generally informational — Gemini considers the content to lack matching model type data.
+**Recoverability**: You can update the note summary or resubmit, but this is generally informational: Gemini considers the content to lack matching model type data.
 
-### 3.3 Model Sync Failure
+### 3.3 Model sync failure
 
 **Symptom**: Note created successfully, `model_extraction.status = "succeeded"`, but `model_sync.status = "pending"`.
 
@@ -161,7 +161,7 @@ LIMIT 50;
 - Model type missing from schema registry
 - Concurrency conflict or transaction issue
 
-### 3.4 Auth / Deployment Wiring Failure
+### 3.4 Auth / deployment wiring failure
 
 **Symptom**: `401 unauthorized` or `403 forbidden`.
 
@@ -174,7 +174,7 @@ LIMIT 50;
 3. Confirm Data Plane Lambda environment variable `PROJECT_ID` is set correctly
 4. Confirm DSQL endpoint and DynamoDB table are reachable
 
-### 3.5 Data Plane Note Read Failure
+### 3.5 Data Plane note read failure
 
 **Symptom**: `GET /api/ai/v1/notes/{note_id}` returns non-200, or returns 200 but with unexpected content.
 
@@ -191,10 +191,10 @@ LIMIT 50;
    - `500` or `503`: Internal service error. Check Data Plane Lambda CloudWatch logs for `get note` log lines near the timestamp of the request.
 
 2. Note returns 200 but `models` array is empty or `row_id` is absent:
-   - This is not a read failure — the note was returned successfully.
+   - This is not a read failure; the note was returned successfully.
    - Check `model_sync.status` in the response. See FAQ Q1 for the `row_id` population rules and section 3.3 for model sync failures.
 
-## 4. Tool Selection Decision Tree
+## 4. Tool selection decision tree
 
 | Goal | Tool |
 |---|---|

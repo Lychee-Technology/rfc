@@ -12,7 +12,7 @@ This index points to the split LTBase API specification documents by service.
 - `API-specs-control-plane-service-auth-routes.en.md`: control-plane admin REST APIs under `/api/v1/auth/...`, including auth config, users, roles, policies, principal policy attachments, binding policies, and referrals.
 - `API-specs-control-plane.en.md`: control-plane admin REST APIs under `/api/v1/org/...` plus the separate legacy `/control-plane` operational action API.
 
-## Recommended Reading Order
+## Recommended reading order
 
 1. [Data Plane APIs](API-specs-data-plane.en.md)
 2. [Auth Service (End-User Token Service) APIs](API-specs-authservice.en.md)

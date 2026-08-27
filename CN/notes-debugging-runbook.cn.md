@@ -120,7 +120,7 @@ LIMIT 50;
 - 响应体 `model_extraction.error` 字段包含诊断码（如 `gemini_model_not_recognized`）
 - 这意味着 `model_sync.status` 会是 `extraction_failed`，且没有 Forma 实体被创建
 
-**可恢复性**：可以更新 note summary 或重新提交，但一般是指示性的——Gemini 认为内容中不包含对应 model type 的信息。
+**可恢复性**：可以更新 note summary 或重新提交，但这个状态通常说明 Gemini 认为内容中不包含对应 model type 的信息。
 
 ### 3.3 Model Sync 失败
 
@@ -191,7 +191,7 @@ LIMIT 50;
    - `500` 或 `503`：内部服务错误。查看 Data Plane Lambda CloudWatch 日志中请求时间戳附近的 `get note` 相关日志。
 
 2. Note 返回 200，但 `models` 数组为空或缺少 `row_id`：
-   - 这不是读取失败——note 已成功返回。
+   - note 已成功返回，这不属于读取失败。
    - 检查响应中的 `model_sync.status`。`row_id` 的填充规则参见常见问题 Q1，model sync 失败排查参见 3.3 节。
 
 ## 4. 工具选择决策树

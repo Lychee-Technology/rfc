@@ -14,7 +14,7 @@ The lineage subsystem captures data flows automatically at the framework layer w
 
 The storage layer uses LTBase's native hot-cold tiered architecture: hot data is written to AWS DSQL, flushed to S3 Parquet via CDC, and cold-data graph queries are executed by LadybugDB. Lineage data does not enter the business EAV tables; it associates with business objects and entity versions through explicit references.
 
-### 1.1 Relationship To Ontology
+### 1.1 Relationship to ontology
 
 LTBase should keep ontology and lineage as adjacent but separate layers:
 
@@ -25,18 +25,18 @@ LTBase should keep ontology and lineage as adjacent but separate layers:
 
 This separation avoids a common design mistake: using lineage edges as a substitute for a business semantic model.
 
-## 2. Core Challenges
+## 2. Core challenges
 
 AI Agent data lineage is more complex than traditional ETL:
 
 | Challenge | Description |
 | :--- | :--- |
-| Non-determinism | LLM outputs are not reproducible — the same input may produce different results |
+| Non-determinism | LLM outputs are not reproducible; the same input may produce different results |
 | Multi-hop reasoning | Data passes through multiple tools and sub-agents, creating long causal chains |
 | Implicit transformation | LLM internal reasoning is opaque; lineage can only be captured at boundaries |
 | Concurrent execution | Lineage can break across parallel agents; a global trace ID is required to reconnect it |
 
-## 3. Core Data Structures
+## 3. Core data structures
 
 ### 3.1 LineageNode
 
@@ -94,29 +94,29 @@ type TrackedData struct {
 }
 ```
 
-## 4. Automatic Capture at the Framework Layer
+## 4. Automatic capture at the framework layer
 
 Lineage is recorded at the framework layer and is completely transparent to business code. The three capture points below cover every data-transformation boundary.
 
-### 4.0 Design Rationale and Capture Mechanism
+### 4.0 Design rationale and capture mechanism
 
 **Why not manual instrumentation in business code**
 
-Traditional data lineage approaches require developers to call lineage APIs explicitly in business functions — every read, transform, and write must be annotated. This creates three problems: (1) high coupling between business logic and lineage infrastructure; changing the lineage record format requires touching all business code; (2) easy to miss — lineage completeness depends on developer discipline, and any new tool or Agent added without instrumentation breaks the chain; (3) in AI Agent scenarios, LLM calls, tool dispatches, and sub-agent communications are frequent and dynamically routed, making manual instrumentation practically unmaintainable.
+Traditional data lineage approaches require developers to call lineage APIs explicitly in business functions: every read, transform, and write must be annotated. This creates three problems: (1) high coupling between business logic and lineage infrastructure; changing the lineage record format requires touching all business code; (2) easy to miss: lineage completeness depends on developer discipline, and any new tool or Agent added without instrumentation breaks the chain; (3) in AI Agent scenarios, LLM calls, tool dispatches, and sub-agent communications are frequent and dynamically routed, making manual instrumentation practically unmaintainable.
 
 **How the framework achieves automatic capture**
 
-The core idea is to funnel all data transformations through a small number of framework-level boundaries and intercept them uniformly:
+All data transformations are funneled through a small number of framework-level boundaries and intercepted there:
 
-- **Tool execution boundary**: Business code invokes tools through `ToolExecutor.Execute`. The framework automatically constructs lineage nodes before and after `toolFn` executes. The business-side `toolFn` only needs to handle business logic with no awareness of lineage.
-- **LLM inference boundary**: All LLM calls are issued through `LineageAwareLLM.Infer`. The framework records metadata — model name, prompt hash, temperature — at the black-box boundary. The LLM's internal reasoning is opaque, but the lineage nodes for its inputs and outputs are fully captured.
-- **Agent dispatch boundary**: `Orchestrator.Dispatch` wraps all sub-agent calls. The framework automatically writes dispatch nodes when tasks are sent and results are collected, and propagates `TraceID` to sub-agents to keep the cross-agent lineage chain intact.
+- Tool execution boundary: business code invokes tools through `ToolExecutor.Execute`. The framework constructs lineage nodes before and after `toolFn` executes. The business-side `toolFn` only handles business logic and has no awareness of lineage.
+- LLM inference boundary: all LLM calls are issued through `LineageAwareLLM.Infer`. The framework records metadata (model name, prompt hash, temperature) at the black-box boundary. The LLM's internal reasoning is opaque, but the lineage nodes for its inputs and outputs are fully captured.
+- Agent dispatch boundary: `Orchestrator.Dispatch` wraps all sub-agent calls. The framework writes dispatch nodes when tasks are sent and results are collected, and propagates `TraceID` to sub-agents to keep the cross-agent lineage chain intact.
 
 **TrackedData: lineage flows with data**
 
-The three interception points connect seamlessly because of one key mechanism: `TrackedData`. Business values and lineage metadata are packed in the same struct and passed together — lineage naturally travels with data without requiring global context injection or manual propagation. Each capture point reads parent node IDs from the input `TrackedData`, writes a new lineage node, and attaches the new node to the output `TrackedData`, forming a complete directed acyclic graph.
+The three interception points connect through one mechanism: `TrackedData`. Business values and lineage metadata are packed in the same struct and passed together, so lineage travels with the data without global context injection or manual propagation. Each capture point reads parent node IDs from the input `TrackedData`, writes a new lineage node, and attaches the new node to the output `TrackedData`, forming a complete directed acyclic graph.
 
-### 4.1 Tool Execution Layer
+### 4.1 Tool execution layer
 
 ```go
 // LineageStore defines the lineage persistence interface.
@@ -177,7 +177,7 @@ func (e *ToolExecutor) Execute(
 }
 ```
 
-### 4.2 LLM Inference Layer
+### 4.2 LLM inference layer
 
 The LLM is a black box; only structured metadata at the boundary can be recorded. Prompts are stored as hashes rather than raw text:
 
@@ -242,7 +242,7 @@ func (l *LineageAwareLLM) Infer(
 }
 ```
 
-### 4.3 Multi-Agent Lineage Propagation
+### 4.3 Multi-agent lineage propagation
 
 Lineage follows `TrackedData` across Agent boundaries; `TraceID` threads through the entire call chain:
 
@@ -309,7 +309,7 @@ func (o *Orchestrator) Dispatch(
 }
 ```
 
-## 5. Storage Architecture
+## 5. Storage architecture
 
 Lineage data does not enter the business Forma entity tables (`entity_main` / `eav_data`). Instead it uses four dedicated physical tables that mirror the Entity Main + EAV layering philosophy of LTBase without pushing graph structures into the business EAV.
 
@@ -330,7 +330,7 @@ Lineage data does not enter the business Forma entity tables (`entity_main` / `e
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 5.1 Hot Table Design
+### 5.1 Hot table design
 
 #### lineage_node_main
 
@@ -442,7 +442,7 @@ Flush trigger conditions reuse LTBase OLAP principles:
 - Accumulated record count > 20,000 **or** oldest unflushed record > 1 hour
 - Write Delta Parquet to S3 and mark `flush_watermark_ms`
 
-### 5.3 Cold Storage Layout (S3 Parquet)
+### 5.3 Cold storage layout (S3 Parquet)
 
 ```text
 s3://<bucket>/lineage/nodes/project_id=<id>/date_hour=<yyyy-mm-dd-hh>/*.parquet
@@ -459,7 +459,7 @@ s3://<bucket>/lineage/ext/project_id=<id>/date_hour=<yyyy-mm-dd-hh>/*.parquet
 | Compression | ZSTD, consistent with business Parquet |
 | Compaction strategy | Merge-on-read; edge dataset applies duplicate suppression and tombstone handling |
 
-### 5.4 LadybugDB Cold Query Mapping
+### 5.4 LadybugDB cold query mapping
 
 LadybugDB can map external Parquet files directly as node / relationship tables without importing them:
 
@@ -486,18 +486,18 @@ MATCH (source:LineageNode {node_id: $nodeId})-[:DerivedFrom*]->(descendant)
 RETURN descendant.node_id, descendant.source_type;
 ```
 
-## 6. Query Path Design
+## 6. Query path design
 
 Queries are tiered by "recency + fan-out", not by query language.
 
-### 6.1 Trace Timeline
+### 6.1 Trace timeline
 
 - Entry: `project_id + trace_id`
 - Hits `idx_node_trace` index, ordered by `created_at_ms`
 - Optionally joins `lineage_entity_ref` to annotate business objects
 - Engine: AWS DSQL
 
-### 6.2 Bounded Ancestor Traversal
+### 6.2 Bounded ancestor traversal
 
 - Entry: `project_id + node_id`
 - Recursive CTE walks `child_node_id → parent_node_id` upward
@@ -527,7 +527,7 @@ ORDER BY n.created_at_ms DESC;
 
 - Engine: AWS DSQL
 
-### 6.3 Bounded Impact Analysis
+### 6.3 Bounded impact analysis
 
 - Entry: `project_id + node_id`
 - Walks `parent_node_id → child_node_id` downward
@@ -535,21 +535,21 @@ ORDER BY n.created_at_ms DESC;
 - Fan-out limit must be stricter than ancestor traversal
 - Engine: AWS DSQL
 
-### 6.4 Business Entity Provenance
+### 6.4 Business entity provenance
 
 - Entry: `project_id + schema_id + row_id`, optional `attr_id`
 - Queries `lineage_entity_ref` to find lineage nodes → joins `lineage_node_main`
 - Non-recursive; this is the primary entry point from a LTBase business object into the lineage graph
 - Engine: AWS DSQL
 
-### 6.5 Deep Historical Graph Query
+### 6.5 Deep historical graph query
 
 - Entry: historical sessions, cross-trace, high fan-out
 - LadybugDB performs full-graph traversal on cold Parquet
 - Can cooperate with DuckDB for mixed graph + wide-table analysis
 - Engine: LadybugDB
 
-### 6.6 Query Routing Strategy
+### 6.6 Query routing strategy
 
 | Condition | Route |
 | :--- | :--- |
@@ -566,7 +566,7 @@ Online protection thresholds:
 | Max time window | 7 days |
 | Hit archived partition | Route directly to cold path |
 
-## 7. Architecture Overview
+## 7. Architecture overview
 
 ```text
 User Input
@@ -596,7 +596,7 @@ Orchestrator Agent
        LadybugDB Graph Query
 ```
 
-## 8. Design Principles
+## 8. Design principles
 
 | Principle | Approach |
 | :--- | :--- |
@@ -610,12 +610,12 @@ Orchestrator Agent
 | Confidence propagation | LLM-generated data carries a `confidence` score; path-level aggregation is computed at query time |
 | Privacy protection | Prompts default to SHA-256 hash storage; sensitive payloads are stored in encrypted ext records |
 
-## 9. Integration with the Existing LTBase Architecture
+## 9. Integration with the existing LTBase architecture
 
 ### 9.1 With EAV + Entity Main
 
 - Business data continues to use `entity_main_<project_id>` + `eav_data_<project_id>`
-- Lineage data is stored independently — graph traversal semantics are not pushed into business tables
+- Lineage data is stored independently; graph traversal semantics are not pushed into business tables
 - Association is achieved through `lineage_entity_ref`, not by copying data between systems
 
 ### 9.2 With change_log / OLAP
@@ -630,15 +630,15 @@ Orchestrator Agent
 - It handles cold-data graph traversal, historical auditing, and high fan-out analysis
 - Supports mapping Parquet files directly as external node/relationship tables without importing them
 
-## 10. Schema-Driven Declarative Lineage
+## 10. Schema-driven declarative lineage
 
-### 10.1 Design Rationale
+### 10.1 Design rationale
 
-The operational lineage capture in Section 4 records the **AI Agent's execution process**: which tool was called, which LLM performed inference, which sub-agent was dispatched. These nodes answer the question "who produced this record."
+The operational lineage capture in Section 4 records the AI Agent's execution process: which tool was called, which LLM performed inference, which sub-agent was dispatched. These nodes answer the question "who produced this record."
 
-In Forma's JSON Schema, some references also describe **provenance-relevant dependencies** between records. When an `ai_note` record is written, its `source_doc_id` field may reference the `document` model as a provenance source. This should be captured as a derived-from relationship for traceability.
+In Forma's JSON Schema, some references also describe provenance-relevant dependencies between records. When an `ai_note` record is written, its `source_doc_id` field may reference the `document` model as a provenance source. This should be captured as a derived-from relationship for traceability.
 
-The goal of declarative provenance capture is to intercept these relationships at the **Forma CRUD write layer** and automatically generate lineage edges, complementing operational lineage.
+The goal of declarative provenance capture is to intercept these relationships at the Forma CRUD write layer and generate lineage edges automatically, complementing operational lineage.
 
 These edges do **not** replace ontology link types:
 
@@ -659,7 +659,7 @@ The comparison is therefore:
 
 Both lineage layers share the storage structure from Section 5 and are joined at query time via `lineage_entity_ref(schema_id, row_id)`.
 
-### 10.2 JSON Schema Extension: `x-lineage-role`
+### 10.2 JSON Schema extension: `x-lineage-role`
 
 An optional annotation `x-lineage-role` is added to `$ref` fields to declare the provenance role of the reference. **Only fields with this annotation trigger lineage capture**. `$ref` fields without the annotation remain ordinary schema relationships and should be interpreted by the ontology layer, not the lineage layer.
 
@@ -690,13 +690,13 @@ An optional annotation `x-lineage-role` is added to `$ref` fields to declare the
 
 | Value | Meaning | PROV-O mapping | Generates lineage edge |
 | :--- | :--- | :--- | :--- |
-| `derived_from` | This record was transformed, processed, or generated from the referenced record — an explicit data transformation exists | [`prov:wasDerivedFrom`](https://www.w3.org/TR/prov-o/#wasDerivedFrom) | Yes |
+| `derived_from` | This record was transformed, processed, or generated from the referenced record; an explicit data transformation exists | [`prov:wasDerivedFrom`](https://www.w3.org/TR/prov-o/#wasDerivedFrom) | Yes |
 | `source` | The referenced record is the original information source (raw material); the current record is a processed or organized product, but the referenced record itself was not transformed | [`prov:hadPrimarySource`](https://www.w3.org/TR/prov-o/#hadPrimarySource) | Yes |
 | (no annotation) | Pure structural membership (FK) with no provenance semantics | — | No |
 
 **Selection guide**: If the current record is a direct processing result of the referenced record's content (e.g., an LLM summary or format conversion), use `derived_from`. If the referenced record only provides background material and the current record has independent content (e.g., a document cited as a knowledge source but the content was generated separately), use `source`. The two values have no difference at the storage or query layer; the distinction is only used for audit presentation.
 
-### 10.3 CRUD Write Interceptor
+### 10.3 CRUD write interceptor
 
 A lineage hook is added to Forma's Create / Update path, reusing the existing `LineageStore` interface from Section 5.
 
@@ -784,7 +784,7 @@ func (i *FormaCRUDInterceptor) AfterWrite(
 
 `SaveEntityRef` corresponds to writes to the `lineage_entity_ref` table in Section 5.1. It is added to the `LineageStore` interface so that no storage-layer changes are needed beyond the interface definition.
 
-### 10.4 Correlation with Operational Lineage and Ontology
+### 10.4 Correlation with operational lineage and ontology
 
 When an AI Agent writes an `ai_note` record via a Tool, both lineage layers coexist in the same store:
 
@@ -832,7 +832,7 @@ WHERE r.project_id = $1
 ORDER BY n.created_at_ms;
 ```
 
-### 10.5 Noise Control Strategies
+### 10.5 Noise control strategies
 
 | Strategy | Description |
 | :--- | :--- |

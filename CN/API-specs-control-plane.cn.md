@@ -22,7 +22,7 @@ Control-plane admin REST surface 按路由族拆分：
 路由服务方式：
 
 - 所有 REST 路由同时挂载在 **两个前缀** 下：`/api/v1/...` 与 `/api/control-plane/v1/...`（`routemanifest.ControlPlanePrefixes`）。两个前缀行为完全一致。
-- 路由表（`internal/routemanifest/controlplane.go` 的 `ControlPlaneRouteSuffixes`）是 load-bearing 的 allowlist：不匹配表内 `METHOD /path` 的请求在鉴权之后一律返回 `404`。
+- 路由表（`internal/routemanifest/controlplane.go` 的 `ControlPlaneRouteSuffixes`）是实际生效的 allowlist：不匹配表内 `METHOD /path` 的请求在鉴权之后一律返回 `404`。
 
 命名空间归属说明：`/api/v1/auth/*` 命名空间由两个服务分治。`cmd/authservice` 是独立的终端用户 token 服务，提供 `health`、`refresh`、`revoke`、`profile/{user_id}` 以及 `login/{provider}`、`id_bindings/{provider}` 等身份路由（见 `internal/authservice/routes.go` 与 `API-specs-authservice.cn.md`）；control plane 提供本文档与 `API-specs-control-plane-service-auth-routes.cn.md` 描述的 admin 管理面。两者互不重叠。
 
@@ -57,7 +57,7 @@ Control-plane admin REST API 使用 Bearer JWT 认证，鉴权基于 **admin pol
 }
 ```
 
-**Org 读路由的放宽鉴权**：`GET /api/v1/org/...`（含 `/org/charts`）使用更宽松的 org-read 鉴权：admin **或** 任何 referral-bound 用户（`referral_code` 非空的已绑定用户）均可读取。非以上二者返回：
+**Org 读路由的鉴权更宽松**：`GET /api/v1/org/...`（含 `/org/charts`）走 org-read 鉴权，admin 或任何 referral-bound 用户（`referral_code` 非空的已绑定用户）均可读取。非以上二者返回：
 
 ```json
 {
@@ -205,7 +205,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 说明：
 
-- （*）`create-iam-authz-records` 是一个更底层的批量种子写入 action。REST `POST /api/v1/auth/policies` 会自动生成 durable `policy_id`；`create-iam-authz-records` 要求调用方显式提供 `policy_id`。action 适用于种子数据、迁移和运维批量写入，REST endpoint 是产品化管理合同。
+- （*）`create-iam-authz-records` 是一个更底层的批量种子写入 action。REST `POST /api/v1/auth/policies` 会自动生成 durable `policy_id`；`create-iam-authz-records` 要求调用方显式提供 `policy_id`。action 适用于种子数据、迁移和运维批量写入，REST endpoint 是产品化管理合约。
 - `cmd/tools` CLI 目前仅暴露 `ensure-project`、`repair-project`、`update-schema`，**不**暴露 policy 或 referral 管理子命令。这些流程请使用 Control Plane Lambda action API 或 HTTP REST API。
 - `list-project-auth-config` 返回完整的 project auth 快照（users、roles、policies、binding policies、referrals、attachments、warnings），比 `GET /api/v1/auth/policies` 范围更广。
 - `ensure-project`、`update-schema`、`migrate-authz-*` 没有 REST 等价物，仍仅通过 action API 提供。
@@ -214,7 +214,7 @@ LTBase 当前在 control plane 上只支持单 project 私有部署。
 
 control plane 管理一组固定的**内置资源**。它们通过各自的 REST endpoint 和 `/control-plane` action 管理——**不是** authz policy 的 `schema` 目标，也不能通过写 policy statement 来授权（例如不存在 `schema: "users"` 或 `schema: "org_units"` 这样的 statement）。control-plane 级别的 admin 是单一的、基于绑定的授权：将 `admin.controlplane` policy 绑定到 principal（见 §8.2）。
 
-每个概念在不同层各自有一致的命名（同一资源在 REST route、JSON 字段、action `kind` 中可能拼写不同）：
+同一概念在每一层的命名各自固定，但层与层之间可能拼写不同（REST route、JSON 字段、action `kind`）：
 
 | 资源 | JSON（`list-project-auth-config`） | REST route | Action `kind` |
 |---|---|---|---|
@@ -230,15 +230,15 @@ control plane 管理一组固定的**内置资源**。它们通过各自的 REST
 
 说明：
 
-- **“组织架构 / org chart”是概念词，不是资源名。** 数据模型是 **org units**（`org_units` / OU）。层级通过 `parent_ou_id` 和物化的 `ou_path` 编码；`/api/v1/org/charts` 只是该树的只读渲染。见 `aaa.md` §5.7。
+- “组织架构 / org chart”是概念词，不是资源名；数据模型是 org units（`org_units` / OU）。层级通过 `parent_ou_id` 和物化的 `ou_path` 编码；`/api/v1/org/charts` 只是该树的只读渲染。见 `aaa.md` §5.7。
 - org units 和 OU-policy 绑定仅通过 `/api/v1/org/...` REST endpoint 管理；`create-iam-authz-records` 没有对应的 `kind`。
 
 ## 4. 通用数据结构
 
 在存储记录与响应中，`policy_id` 和 `role_id` 是服务端生成的 UUIDv7 持久标识符（由 auth
 service 定义）；可读的 `slug` 是便捷引用键，调用方可在请求中用它引用实体。`ou_id` 与
-`user_id` 由调用方/身份提供。唯一例外是 `create-iam-authz-records` 动作载荷（§8.2）中由
-调用方提供的 `policy_id`/`role_id`——该动作要求调用方显式提供持久 id。
+`user_id` 由调用方/身份提供。唯一例外是 `create-iam-authz-records` 动作载荷（§8.2）：
+其中的 `policy_id`/`role_id` 必须由调用方显式提供持久 id。
 
 ### 4.1 ControlPlaneUser（公开 DTO）
 
@@ -300,7 +300,7 @@ org-chart 与 PUT attach 响应中的变体省略嵌套 `policy`，只含 `ou_id
 
 ### 4.4 Manager 关系
 
-manager 关系不再以扁平字段返回，而是返回完整的用户对象对：
+manager 关系不再以扁平字段返回，而是返回一对完整的用户对象：
 
 ```json
 {
@@ -893,13 +893,9 @@ capability catalog 的校验会对照 schema registry 中已知的 entity schema
 
 ## 8. `/control-plane` Action API 说明
 
-Admin REST API 不替代现有的 action-style control-plane API。
+Admin REST API 不替代现有的 action-style control-plane API。产品化管理后台与自动化配置请使用 REST admin API；Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/control-plane`。
 
-产品化管理后台与自动化配置请使用 REST admin API。
-
-Lambda Console 风格运维、CLI 流程和后端运维任务继续使用 `/control-plane`。
-
-特别是：
+具体来说：
 
 - `ensure-project`、`update-schema`、migration 等仍仅通过 `/control-plane` 提供
 - `migrate-authz-policy-model` 与 `migrate-authz-resource-identity` 是运维 action，不是 `/api/v1/...` REST endpoint
@@ -1061,7 +1057,7 @@ Control Plane Admin API 要求调用者持有 admin policy。`slug` 必须为 `a
 }
 ```
 
-admin policy 的 `policy_document` 内容不会被 control-plane admin 鉴权检查；鉴权唯一路径是通过 `principal_policy_attachment` 将 admin policy 绑定到用户（或通过角色间接绑定，先将 policy 绑定到 role，再将 role 分配给用户）。因此空的 `statements` 列表即可。control-plane admin 是单一的、基于绑定的授权，而非按资源的 op：`controlplane` 不是 entity schema，`admin` 也不是合法 op——entity statement 通过 `schema` 配合 `selector` 限定实体，op 仅限 `create` / `read` / `update` / `delete` / `*`（见 `aaa.md` §6）。
+control-plane admin 鉴权不检查 admin policy 的 `policy_document` 内容；唯一的鉴权路径是通过 `principal_policy_attachment` 将 admin policy 绑定到用户（或通过角色间接绑定，先将 policy 绑定到 role，再将 role 分配给用户）。因此空的 `statements` 列表即可。control-plane admin 是单一的、基于绑定的授权，而非按资源的 op：`controlplane` 不是 entity schema，`admin` 也不是合法 op——entity statement 通过 `schema` 配合 `selector` 限定实体，op 仅限 `create` / `read` / `update` / `delete` / `*`（见 `aaa.md` §6）。
 
 如果已通过 REST Admin API 存在 admin，也可以使用 REST 绑定：`PUT /api/v1/auth/principals/user/<USER_ID>/policies/admin.controlplane`，其中 `admin.controlplane` 作为 slug 解析。
 

@@ -2,7 +2,7 @@
 
 This RFC proposes an architecture pattern for enterprise AI Agent Governance that combines Operational Ontology, LLM-assisted incremental knowledge construction, and Policy-as-Code.
 
-The goal is not to let an LLM govern enterprise agents on its own. The goal is to build an auditable, testable, and evolvable governance compilation pipeline:
+This is not a proposal to let an LLM govern enterprise agents on its own. It describes an auditable, testable, and evolvable governance compilation pipeline:
 
 - LLMs turn policies, capability boundaries, assets, approval rules, and runtime events into reviewable semantic proposals.
 - Humans approve critical facts, interpretations, classifications, and control decisions.
@@ -13,11 +13,11 @@ The design assumes that LLMs are proposal engines, not authority engines.
 
 ---
 
-## 1. Why AI Agent Governance Is Hard
+## 1. Why AI Agent Governance is hard
 
 The core problem is that enterprise governance rules are ambiguous, evolving, and cross-domain, while agent behavior must be controlled in ways that are precise, auditable, and enforceable.
 
-Before defining the architecture, this RFC separates two concepts that are often conflated.
+This RFC separates two concepts that are often conflated.
 
 ### 1.1 AI Governance vs AI Compliance
 
@@ -50,7 +50,7 @@ Organizations that only do compliance tend to optimize for the legal minimum. Or
 
 In practice, that gap appears as five fractures.
 
-### 1.2 Semantic Fracture
+### 1.2 Semantic fracture
 
 The same agent governance phrase can mean different things to business, engineering, security, and compliance teams.
 
@@ -67,7 +67,7 @@ A governance system cannot flatten these into one rule table. It must distinguis
 
 Semantic alignment for agent governance is therefore not a synonym problem. It requires a shared model for `agent`, `capability`, `action`, `approval`, `evidence`, and `responsibility`.
 
-### 1.3 Evidence Fracture
+### 1.3 Evidence fracture
 
 Agent compliance is not proven by writing a rule. The organization must prove that a specific agent, at a specific time, in a specific context, took or did not take a specific action under the applicable controls.
 
@@ -82,7 +82,7 @@ Without scoped evidence, common failures include:
 
 `AuditEvidence` must be a first-class governance object. Logs and screenshots are artifacts, not the evidence model itself.
 
-### 1.4 Execution Fracture
+### 1.4 Execution fracture
 
 Governance principles usually live in PDFs, wikis, or spreadsheets. Runtime enforcement lives in agent registration, tool invocation, data access, permissioning, external API calls, monitoring systems, and approval workflows.
 
@@ -96,7 +96,7 @@ Example governance statement:
 
 To become enforceable, this statement must go through three technical stages.
 
-#### Stage A: Semantic Parsing
+#### Stage A: Semantic parsing
 
 The statement is transformed into structured obligations, controls, and evidence requirements.
 
@@ -124,7 +124,7 @@ Relation:
 
 At this point the system has versioned, referenceable semantic objects instead of an isolated policy sentence.
 
-#### Stage B: Contract Compilation
+#### Stage B: Contract compilation
 
 Approved semantic obligations are compiled into executable compliance mechanisms.
 
@@ -167,7 +167,7 @@ Other obligations become Approval Contracts:
 
 Only after this step does the Governance statement become a Compliance mechanism the system can execute.
 
-#### Stage C: Control Plane Enforcement
+#### Stage C: Control plane enforcement
 
 Contracts must be attached to control points, not just made queryable.
 
@@ -189,7 +189,7 @@ Audit Trail:
 
 The architecture in this RFC, `Semantic Governance Graph -> Contract & Policy Layer -> Governance Control Plane`, exists to close this compilation gap.
 
-### 1.5 Evolution Fracture
+### 1.5 Evolution fracture
 
 Agent policy, capability boundaries, vendor constraints, and implementation details keep changing.
 
@@ -205,7 +205,7 @@ The governance system must support:
 - change impact analysis
 - control regression tests
 
-### 1.6 Responsibility Fracture
+### 1.6 Responsibility fracture
 
 AI Governance is not a purely technical problem. Different decisions require different accountable roles:
 
@@ -220,7 +220,7 @@ If every judgment is encoded as "LLM inferred" or "system classified," the respo
 
 ---
 
-## 2. Two Useful Patterns
+## 2. Two useful patterns
 
 This RFC borrows from two patterns and deliberately changes both for enterprise governance.
 
@@ -241,7 +241,7 @@ The value is that semantic objects can be acted on, not merely queried. Rules ca
 
 The limitation is cost. Platform ontologies usually require heavy modeling, process redesign, and expert-driven implementation. That is expensive when AI regulations, internal policy, and agent practice are still changing quickly.
 
-### 2.2 LLM Incremental Knowledge Construction
+### 2.2 LLM incremental knowledge construction
 
 Karpathy's LLM Wiki pattern points to a different knowledge-management idea: do less repeated retrieval and synthesis at query time, and instead use LLMs to incrementally compile incoming sources into a durable knowledge structure.
 
@@ -253,9 +253,9 @@ The useful mechanisms are:
 
 This does not directly solve enterprise compliance. Markdown is not an executable compliance substrate. Enterprise governance needs permissions, evidence chains, approval workflows, regression tests, retention, and audit preservation. It also must distinguish valid, expired, applicable, inapplicable, superseded, proposed, accepted, and rejected knowledge.
 
-The reusable idea is not "LLM writes truth." The reusable idea is "LLM continuously proposes structured changes for human and system review."
+The reusable mechanism is not the LLM writing truth; it is the LLM continuously proposing structured changes for human and system review.
 
-### 2.3 Adapt the Pattern, Replace the Substrate, Restrict Authority
+### 2.3 Adapt the pattern, replace the substrate, restrict authority
 
 The enterprise version replaces the wiki substrate and restricts LLM authority.
 
@@ -268,7 +268,7 @@ The enterprise version replaces the wiki substrate and restricts LLM authority.
 | LLM edits knowledge directly | LLM creates PROPOSED changes through APIs |
 | Accumulating knowledge | Controlled evolution, retirement, versioning, and regression tests |
 
-The core rule is simple: LLMs can extract, summarize, match, suggest, and draft, but they cannot grant legal authority, directly change production state, or bypass human approval for high-impact side effects.
+The rule is that LLMs can extract, summarize, match, suggest, and draft, but they cannot grant legal authority, directly change production state, or bypass human approval for high-impact side effects.
 
 ---
 
@@ -283,7 +283,7 @@ Sources
   -> Governance Control Plane
 ```
 
-### 3.1 System View
+### 3.1 System view
 
 ```text
 Sources
@@ -318,7 +318,7 @@ Governance Control Plane
   - Writeback Adapters
 ```
 
-### 3.2 Design Principles
+### 3.2 Design principles
 
 1. Semantic evolution must be controlled.
    The graph can ingest policies, assets, and events continuously, but core concepts, obligations, controls, and high-impact claims must be reviewed, versioned, and regression-tested.
@@ -400,7 +400,7 @@ SourceAuthority:
 
 This model can express laws, regulatory guidance, internal policies stricter than external standards, contractual duties that only apply to a specific customer, and old policies superseded by new versions.
 
-### 4.2 Core Objects
+### 4.2 Core objects
 
 The main chain is:
 
@@ -573,7 +573,7 @@ AuditEvidence:
 
 This avoids the mistake of treating "there is a log" as equivalent to "the action is compliant."
 
-### 4.3 Object Relationships and Lifecycle
+### 4.3 Object relationships and lifecycle
 
 The core relationship cardinality is:
 
@@ -609,7 +609,7 @@ State transitions are append-only:
 
 Historical versions remain available through `transaction_time`.
 
-### 4.4 Agent Assets and Execution Context
+### 4.4 Agent assets and execution context
 
 Governance cannot operate on an abstract "AI system" alone. It needs concrete agents, configuration versions, capabilities, execution sessions, resources, and responsibility boundaries.
 
@@ -660,7 +660,7 @@ ExecutionContext:
   human_approval_required: boolean
 ```
 
-### 4.5 Time Semantics
+### 4.5 Time semantics
 
 Auditors often ask: at the time this agent requested this action, what did we know, what rules applied, who approved what, and what evidence existed?
 
@@ -680,7 +680,7 @@ Temporal Model:
 
 Architecture examples should not hard-code policy effective dates. Real systems should model them by policy clause, obligation class, actor role, and applicability phase.
 
-### 4.6 Property Graph First, RDF/SKOS/SHACL at the Boundary
+### 4.6 Property Graph first, RDF/SKOS/SHACL at the boundary
 
 The operational graph should start as a Property Graph because it is more natural for enterprise object modeling, application development, and runtime queries.
 
@@ -727,7 +727,7 @@ The known gaps are:
 - PostgreSQL is acceptable for operational traversal but not ideal for complex regulatory reasoning at scale
 - LTBase does not yet have an RDF/SKOS/SHACL mapping and validation layer
 
-### 4.7 LLM Operation Interface
+### 4.7 LLM operation interface
 
 LLMs should not edit storage directly. They should call structured governance APIs that enforce schema validation, permissions, source tracking, consistency constraints, and state transitions.
 
@@ -757,7 +757,7 @@ Current gaps:
 
 ---
 
-## 5. Semantic Supply Chain Security
+## 5. Semantic supply chain security
 
 LLM risk is not just hallucination. In governance systems, semantic supply chain risk is often more serious:
 
@@ -783,7 +783,7 @@ Source Governance:
 
 User reports and incident records can enter as `CASE_RECORD` or `USER_REPORT`, but they cannot directly modify legal concepts or obligation definitions.
 
-### 5.2 Quarantine State
+### 5.2 Quarantine state
 
 New LLM-ingested content starts quarantined.
 
@@ -800,7 +800,7 @@ status = ACCEPTED
 authority_level = COMPLIANCE_APPROVED | LEGAL_APPROVED | BOARD_APPROVED
 ```
 
-### 5.3 Prompt Injection Controls
+### 5.3 Prompt injection controls
 
 Unstructured sources should be filtered before entering the LLM pipeline.
 
@@ -1028,7 +1028,7 @@ Known gaps:
 - evidence panels, blast-radius view, and precedent comparison in the control plane UI
 - SLA escalation, reviewer workload balancing, and governance-grade audit preservation
 
-### 6.4 Contract Regression Tests
+### 6.4 Contract regression tests
 
 Contract changes must be tested before release.
 
@@ -1246,7 +1246,7 @@ MonitoringSignal:
   - intended purpose change
 ```
 
-### 8.2 Feedback Loop
+### 8.2 Feedback loop
 
 ```text
 MonitoringSignal
@@ -1267,7 +1267,7 @@ If an agent triggers repeated high-risk external action requests within 24 hours
   5. If risk is high, create ApprovalTask, reduce capability, or pause the action.
 ```
 
-### 8.3 Detection Thresholds
+### 8.3 Detection thresholds
 
 Monitoring should use aggregated patterns, not isolated events.
 
@@ -1281,7 +1281,7 @@ Monitoring should use aggregated patterns, not isolated events.
 
 Thresholds should be configurable and jurisdiction-aware. Alerts can be `INFO`, `WARNING`, or `CRITICAL`. Only `CRITICAL` should trigger automatic re-evaluation.
 
-### 8.4 Automatic Re-evaluation
+### 8.4 Automatic re-evaluation
 
 ```text
 1. MonitoringSignal enters a queue.
@@ -1299,7 +1299,7 @@ Re-evaluation itself should not silently mutate production state. High-risk paus
 
 ---
 
-## 9. End-to-End Scenario: High-Impact Refund Action
+## 9. End-to-end scenario: high-impact refund action
 
 ### 9.1 Event
 
@@ -1333,7 +1333,7 @@ status = PROPOSED
 executable = false
 ```
 
-### 9.3 Human Review of the ActionClaim
+### 9.3 Human review of the ActionClaim
 
 The SystemOwner confirms the factual claim: the agent requested a refund action and has the relevant tool/capability.
 
@@ -1352,7 +1352,7 @@ If legal interpretation is disputed, LegalCounsel may add `LEGAL_APPROVED`.
 
 This approval is about the correctness of the ActionClaim. It is not approval for this specific execution. Execution approval happens later through the Approval Contract.
 
-### 9.4 Contract Evaluation
+### 9.4 Contract evaluation
 
 The accepted ActionClaim triggers the `flag-sensitive-agent-action` Action Contract. The Policy Engine returns:
 
@@ -1370,7 +1370,7 @@ evidence_required:
   - TOOL_EXECUTION_LOG
 ```
 
-### 9.5 Control Plane Execution
+### 9.5 Control plane execution
 
 The GovernanceActionEngine executes cross-system side effects as a Saga.
 
@@ -1386,7 +1386,7 @@ The GovernanceActionEngine executes cross-system side effects as a Saga.
 
 If JIRA creation succeeds but agent state update fails, the system uses compensation or reconciliation instead of pretending there is a global ACID transaction.
 
-### 9.6 Execution Approval and Conditional Approval
+### 9.6 Execution approval and conditional approval
 
 At this stage the ComplianceOfficer and SecurityOwner approve the execution itself, not the ActionClaim classification.
 
@@ -1413,7 +1413,7 @@ CreateRefundExecutionAudit(due=1h)
 SetupRuntimeMonitoring(frequency=daily)
 ```
 
-### 9.7 Knowledge Feedback
+### 9.7 Knowledge feedback
 
 Execution results and evidence write back to the semantic layer.
 
@@ -1434,7 +1434,7 @@ If LegalCounsel did not participate, the ActionClaim must not be labeled `LEGAL_
 
 ---
 
-## 10. Responsibility Boundaries
+## 10. Responsibility boundaries
 
 | Object / decision | Layer | LLM | System API | Engineering Owner | Compliance | Legal | Ethics Board |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -1450,9 +1450,9 @@ This boundary is what makes the system credible under audit.
 
 ---
 
-## 11. Failure Modes and Mitigations
+## 11. Failure modes and mitigations
 
-### 11.1 LLM Misclassifies Action Risk
+### 11.1 LLM misclassifies action risk
 
 Mitigations:
 
@@ -1463,7 +1463,7 @@ Mitigations:
 - human review for high-impact classifications
 ```
 
-### 11.2 Policy Source Is Outdated
+### 11.2 Policy source is outdated
 
 Mitigations:
 
@@ -1474,7 +1474,7 @@ Mitigations:
 - source hash verification
 ```
 
-### 11.3 Evidence Expires But Agent Still Appears Compliant
+### 11.3 Evidence expires but agent still appears compliant
 
 Mitigations:
 
@@ -1485,7 +1485,7 @@ Mitigations:
 - expired evidence lint
 ```
 
-### 11.4 External Writeback Fails
+### 11.4 External writeback fails
 
 Mitigations:
 
@@ -1497,7 +1497,7 @@ Mitigations:
 - manual reconciliation queue
 ```
 
-### 11.5 Policy Change Impacts Too Many Agents
+### 11.5 Policy change impacts too many agents
 
 Mitigations:
 
@@ -1508,7 +1508,7 @@ Mitigations:
 - approval before major version release
 ```
 
-### 11.6 Reviewer Rubber-Stamping
+### 11.6 Reviewer rubber-stamping
 
 Mitigations:
 
@@ -1520,7 +1520,7 @@ Mitigations:
 - reviewer workload monitoring
 ```
 
-### 11.7 Shadow AI Is Outside the Control Plane
+### 11.7 Shadow AI is outside the control plane
 
 Mitigations:
 
@@ -1532,7 +1532,7 @@ Mitigations:
 - employee reporting channel
 ```
 
-### 11.8 Governance and Compliance Drift Apart
+### 11.8 Governance and Compliance drift apart
 
 Mitigations:
 
@@ -1546,7 +1546,7 @@ Mitigations:
 
 ---
 
-## 12. LTBase / LTFlow Capability Mapping and Gaps
+## 12. LTBase / LTFlow capability mapping and gaps
 
 | Layer | Required capability | Reusable LTBase / LTFlow capability | Gap |
 | :--- | :--- | :--- | :--- |
@@ -1610,7 +1610,7 @@ Wave 3:
 
 Wave 1 connects semantic objects, policy decisions, and review workflow. Wave 2 connects them to real control points and adds UI/audit. Wave 3 handles heavier interoperability and advanced workflow capabilities.
 
-### 12.2 Key Engineering Risks
+### 12.2 Key engineering risks
 
 Run PoCs before committing to full implementation for:
 
@@ -1621,9 +1621,9 @@ Run PoCs before committing to full implementation for:
 
 ---
 
-## 13. Implementation Roadmap
+## 13. Implementation roadmap
 
-### Phase 0: Control Plane Inventory, 2-4 Weeks
+### Phase 0: control plane inventory, 2-4 weeks
 
 Outputs:
 
@@ -1636,7 +1636,7 @@ Outputs:
 - control plane coverage baseline
 ```
 
-### Phase 1: Read-Only Semantic Layer, 2-3 Months
+### Phase 1: read-only semantic layer, 2-3 months
 
 Build the graph without automatic execution.
 
@@ -1649,7 +1649,7 @@ Build the graph without automatic execution.
 - LTBase governance schema pack on Forma + semantic types
 ```
 
-### Phase 2: Semi-Automated Review, 2-3 Months
+### Phase 2: semi-automated review, 2-3 months
 
 Add Policy Contracts, Approval Contracts, and governance audit, but do not directly mutate production systems yet.
 
@@ -1662,7 +1662,7 @@ Add Policy Contracts, Approval Contracts, and governance audit, but do not direc
 - LTFlow approval workflow templates and initial control plane UI
 ```
 
-### Phase 3: Limited Writeback, 2-3 Months
+### Phase 3: limited writeback, 2-3 months
 
 Attach strong controls to well-defined execution points.
 
@@ -1676,7 +1676,7 @@ Attach strong controls to well-defined execution points.
 - GovernanceActionEngine facade
 ```
 
-### Phase 4: Lifecycle Closure, Continuous
+### Phase 4: lifecycle closure, continuous
 
 Extend governance after deployment.
 
@@ -1694,7 +1694,7 @@ Extend governance after deployment.
 
 ## 14. Conclusion
 
-The hard problem in AI Agent Governance is not asking an LLM what a policy means. The hard problem is turning evolving governance knowledge into an auditable, testable, and executable enterprise control plane.
+The hard problem in AI Agent Governance is not asking an LLM what a policy means. It is turning evolving governance knowledge into an auditable, testable, and executable enterprise control plane.
 
 Operational Ontology shows that business semantics can become part of operational systems. LLM incremental knowledge construction shows how new sources can continuously update a durable knowledge structure. Neither pattern is sufficient by itself for enterprise compliance.
 
@@ -1711,6 +1711,6 @@ With LTBase and LTFlow, this does not require starting from a blank platform. Th
 
 The current stack is a practical foundation, not a finished enterprise governance product. Governance schemas, policy runtime extensions, audit ledger, advanced approvals, governance UI, writeback adapters, and monitoring loops still require focused implementation.
 
-The architecture should therefore be understood not as an automatic compliance solution, but as a pattern for compiling governance knowledge into an executable control plane.
+The architecture is therefore a pattern for compiling governance knowledge into an executable control plane, not an automatic compliance solution.
 
-The objective is to let governance evolve at the speed of AI Agents and enterprise policy while preserving reliability, auditability, and accountable human judgment.
+The objective is to let governance keep pace with changes in AI Agents and enterprise policy while preserving reliability, auditability, and accountable human judgment.

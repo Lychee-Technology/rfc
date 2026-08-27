@@ -1,12 +1,12 @@
-# **LTBase AAA Control-Plane Store Mapping**
+# LTBase AAA Control-Plane Store Mapping
 
 This document defines how the storage-agnostic AAA model in `aaa.md` maps onto concrete control-plane backends.
 
-The primary specification defines the **logical auth-store contract** only. This mapping document explains how that contract can be implemented with both **DynamoDB** and **PostgreSQL** without changing AAA semantics.
+The primary specification defines the logical auth-store contract only. This mapping document explains how that contract can be implemented with both DynamoDB and PostgreSQL without changing AAA semantics.
 
 ---
 
-## **1. Goals**
+## 1. Goals
 
 The backend mapping must preserve the following invariants across all supported stores:
 
@@ -22,7 +22,7 @@ The AAA design must not depend on a backend-specific primitive when the same beh
 
 ---
 
-## **2. Logical Record Families**
+## 2. Logical Record Families
 
 The logical record families are defined in `aaa.md` Section 5.4.
 
@@ -46,13 +46,13 @@ The backend is responsible for providing equivalent access paths for:
 * `audit_event`
 
 > [!NOTE]
-> Earlier drafts listed `role_permission`, `permission_profile`, and `resource_grant` as logical record families. Per `aaa.md` §4.1, these have been folded into the unified `policy_profile` model. A `resource_grant`-style index may still be maintained as a **physical projection** for hot-path lookups (see §5.5), but it is not part of the logical contract.
+> Earlier drafts listed `role_permission`, `permission_profile`, and `resource_grant` as logical record families. Per `aaa.md` §4.1, these have been folded into the unified `policy_profile` model. A `resource_grant`-style index may still be maintained as a physical projection for hot-path lookups (see §5.5), but it is not part of the logical contract.
 
 ---
 
-## **3. DynamoDB Mapping**
+## 3. DynamoDB Mapping
 
-### **3.1 Physical Shape**
+### 3.1 Physical Shape
 
 DynamoDB can implement the auth store with a shared table and project-scoped key namespaces.
 
@@ -75,14 +75,14 @@ DynamoDB can implement the auth store with a shared table and project-scoped key
 | `session_edge` | `PK=auth#project#{project_id}#session`, `SK=child#{parent_jti}#{child_jti}` | Parent/child revoke traversal |
 | `audit_event` | `PK=auth#audit#project#{project_id}#date#{yyyy-mm-dd}`, `SK=ts#{unix_ms}#{rand}` | Append-only ordered log |
 
-### **3.2 Strengths / Constraints**
+### 3.2 Strengths / Constraints
 
 * Prefix queries make project-scoped listing efficient.
 * Conditional writes and transactions support bind/session safety.
 * Item shape must remain bounded; large policy payloads should still stay within DynamoDB item limits. A `policy_profile` whose statement list grows past the item-size budget should be split across multiple policies and re-attached.
 * Audit ordering is naturally represented through sort-key time ordering.
 
-### **3.3 Optional Physical Projection (`resource_grant` Index)**
+### 3.3 Optional Physical Projection (`resource_grant` Index)
 
 For hot-path single-statement lookups (e.g., `read` on a known `resource_id`), an implementation may maintain a denormalized projection keyed by:
 
@@ -90,13 +90,13 @@ For hot-path single-statement lookups (e.g., `read` on a known `resource_id`), a
 PK=auth#project#{project_id}, SK=grant#{principal_type}#{principal_id}#{schema}#{selector}
 ```
 
-where `selector` is either `resource#{resource_id}` or `filter#{filter_hash}`. This is a **cache** of statements drawn from `policy_profile` (and their `principal_policy_attachment` / `ou_policy_attachment` reachability). It must be invalidated whenever the underlying policy or attachment changes, and must never produce a decision that differs from full statement evaluation (§5.5).
+where `selector` is either `resource#{resource_id}` or `filter#{filter_hash}`. This is a cache of statements drawn from `policy_profile` (and their `principal_policy_attachment` / `ou_policy_attachment` reachability). It must be invalidated whenever the underlying policy or attachment changes, and must never produce a decision that differs from full statement evaluation (§5.5).
 
 ---
 
-## **4. PostgreSQL Mapping**
+## 4. PostgreSQL Mapping
 
-### **4.1 Physical Shape**
+### 4.1 Physical Shape
 
 PostgreSQL can implement the same logical auth store with normalized tables plus unique indexes.
 
@@ -121,14 +121,14 @@ Suggested table set:
 | `session_edge` | `auth_session_edge` | `UNIQUE(project_id, parent_jti, child_jti)` |
 | `audit_event` | `auth_audit_event` | index `(project_id, event_ts, tie_breaker)` |
 
-### **4.2 Strengths / Constraints**
+### 4.2 Strengths / Constraints
 
 * Multi-row transactions naturally support bind/session workflows.
 * Unique indexes provide deterministic identity and referral safety.
 * Query planners can optimize joins for policy attachment expansion (user / role / OU surfaces).
 * Audit ordering should use `(event_ts, tie_breaker)` rather than relying on insertion order.
 
-### **4.3 Optional Physical Projection (`auth_resource_grant`)**
+### 4.3 Optional Physical Projection (`auth_resource_grant`)
 
 For hot-path single-statement lookups, an implementation may maintain a denormalized table:
 
@@ -146,13 +146,13 @@ CREATE TABLE auth_resource_grant (
 );
 ```
 
-The table is **derived** from `auth_policy_profile` + attachment tables and must be invalidated on any change to the source. It is not authoritative; the full statement evaluation in §5.5 remains the source of truth.
+The table is derived from `auth_policy_profile` plus the attachment tables and must be invalidated on any change to the source. It is not authoritative; the full statement evaluation in §5.5 remains the source of truth.
 
 ---
 
-## **5. Operation Equivalence**
+## 5. Operation Equivalence
 
-### **5.1 Login Lookup**
+### 5.1 Login Lookup
 
 Logical contract:
 
@@ -170,7 +170,7 @@ PostgreSQL implementation:
 * `SELECT ... FROM auth_external_lookup WHERE ...`
 * fallback `SELECT ... FROM auth_user_profile WHERE project_id = ? AND user_id = ?`
 
-### **5.2 Bind Transaction**
+### 5.2 Bind Transaction
 
 Logical contract:
 
@@ -191,7 +191,7 @@ PostgreSQL implementation:
 * `SELECT ... FOR UPDATE` or equivalent row locking for referral
 * unique-index enforcement plus checked updates/inserts
 
-### **5.3 Role Expansion & Effective Policy Collection**
+### 5.3 Role Expansion & Effective Policy Collection
 
 Logical contract (matches `aaa.md` §9.1 + §9.2):
 
@@ -214,7 +214,7 @@ PostgreSQL implementation:
 * indexed `SELECT` on `auth_principal_policy_attachment` for user-direct and per-role attachments
 * batched `IN (...)` fetch from `auth_policy_profile`
 
-### **5.4 OU Policy Inheritance**
+### 5.4 OU Policy Inheritance
 
 Logical contract:
 
@@ -232,7 +232,7 @@ PostgreSQL implementation:
 * indexed `SELECT` from `auth_ou_policy_attachment`
 * batched fetch from `auth_policy_profile`
 
-### **5.5 Hot-Path Selector Lookup (Optional Projection)**
+### 5.5 Hot-Path Selector Lookup (Optional Projection)
 
 The unified policy model is fully served by §5.3 + §5.4 followed by statement flattening and evaluation (`aaa.md` §9.3 / §9.6). For hot-path requests on a known `resource_id` or a small set of stable `filter` selectors, implementations may consult the optional `resource_grant`-style projection from §3.3 / §4.3 to short-circuit.
 
@@ -252,10 +252,10 @@ PostgreSQL implementation:
 
 Invariants:
 
-* The projection is **derived state**. Writes to `policy_profile` / `principal_policy_attachment` / `ou_policy_attachment` must invalidate or update affected rows synchronously, or the projection must be skipped.
+* The projection is derived state. Writes to `policy_profile` / `principal_policy_attachment` / `ou_policy_attachment` must invalidate or update affected rows synchronously, or the projection must be skipped.
 * Any divergence between projection-based and full-evaluation decisions is a correctness bug; the projection is an optimization, not a parallel authorization mechanism.
 
-### **5.6 Audit Append**
+### 5.6 Audit Append
 
 Logical contract:
 
@@ -272,7 +272,7 @@ PostgreSQL implementation:
 
 ---
 
-## **6. Portability Rules**
+## 6. Portability Rules
 
 The primary AAA design must assume only the following backend capabilities:
 
@@ -296,7 +296,7 @@ If a future feature cannot be represented within these shared capabilities, the 
 
 ---
 
-## **7. Summary**
+## 7. Summary
 
 `aaa.md` defines the AAA semantics.
 

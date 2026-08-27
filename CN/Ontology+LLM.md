@@ -1,22 +1,22 @@
 # 从知识图谱到治理控制面：Ontology + LLM 增量构建模式在 AI Agent Governance & Compliance 中的架构设计
 
-> 本文提出一种将 Operational Ontology、LLM 增量知识编译与 Policy-as-Code 相结合的企业 AI Agent Governance 架构模式。
-> 其核心思想不是让 LLM 自动治理企业 AI Agent，而是建立一条可审计、可测试、可演化的治理编译链：
+> 本文提出一种将 Operational Ontology、LLM 增量知识编译与 Policy-as-Code 结合的企业 AI Agent Governance 架构模式。
+> 该模式不让 LLM 自动治理企业 AI Agent，而是建立一条可审计、可测试、可演化的治理编译链：
 > LLM 将政策、能力边界、资产、审批规则和运行事件编译为可审核的语义主张；人类批准关键判断；契约层将批准后的约束、控制项和证据要求编译为策略、动作和审批流程；治理控制面在 agent 注册、操作执行、数据访问、外部调用和持续监控等关键路径上执行这些契约。
 
 ---
 
 ## 1. 问题：为什么 AI Governance & Compliance 如此之难
 
-企业 AI Agent 治理的根本困难在于：**治理规则是模糊、演化、跨域的，但 agent 行为合规要求精确、可审计、可强制**。
+企业 AI Agent 治理的困难在于：治理规则模糊、演化、跨域，但 agent 行为合规要求精确、可审计、可强制。
 
-在进入具体问题之前，需要先区分两个经常被混用、但并不等价的概念。
+这里先区分两个经常被混用、但并不等价的概念。
 
 ### 1.0 AI Governance vs AI Compliance
 
-可以用一句话概括二者关系：
+二者关系可以概括为：
 
-> **Governance 是“做正确的事”的框架，Compliance 是“按规定做事”的执行。**
+> Governance 是“做正确的事”的框架，Compliance 是“按规定做事”的执行。
 
 二者紧密相关，但本质不同。
 
@@ -43,7 +43,7 @@ Compliance（合规）
   └── 是 Governance 的必要但非充分条件
 ```
 
-这一区分非常关键。只做 Compliance，组织往往只能达到“法定最低标准”；只做 Governance，不把原则编译为可执行、可审计的控制，又会停留在文件层。本文要解决的，不是二选一，而是建立一条从 Governance 意图到 Compliance 执行的治理编译链。
+只做 Compliance，组织往往只能达到“法定最低标准”；只做 Governance，不把原则编译为可执行、可审计的控制，又会停留在文件层。本文要建立的是一条从 Governance 意图到 Compliance 执行的治理编译链，而不是在二者之间做选择。
 
 在实践中，这种困难体现为五类断裂。
 
@@ -67,7 +67,7 @@ Compliance（合规）
 * 哪些是数据访问边界；
 * 哪些只是运行期异常、事故或用户投诉。
 
-因此，agent 治理中的语义对齐，不是给“AI”找几个同义词，而是对 **agent、capability、action、approval、evidence 和 responsibility** 做统一建模。
+因此，agent 治理中的语义对齐需要对 agent、capability、action、approval、evidence 和 responsibility 做统一建模，而不是给“AI”找几个同义词。
 
 ### 1.2 证据断裂
 
@@ -82,7 +82,7 @@ Compliance（合规）
 * agent 的一次真实 tool call 没有被审计记录到；
 * 第三方 agent 的 capability 声明被当成内部验证结论使用。
 
-因此，AI Agent Governance 系统必须把 **execution evidence** 作为一等对象，而不是把日志和审批截图当作附件。
+因此，AI Agent Governance 系统必须把 execution evidence 作为一等对象，而不是把日志和审批截图当作附件。
 
 ### 1.3 执行断裂
 
@@ -90,15 +90,15 @@ Compliance（合规）
 
 如果这条规则只存在于政策文档中，那么系统层面没有任何强制力。工程团队可能忘记、绕过、误解，或者在影子 AI 项目中完全不经过治理流程。
 
-用 Governance vs Compliance 的视角看，执行断裂的根因并不是“企业缺少规则”，而是：
+用 Governance vs Compliance 的视角看，执行断裂的原因并不是“企业缺少规则”，而是：
 
-> **Governance 声明与 Compliance 门禁是不同层级的对象，但大多数企业没有建立从前者到后者的编译层。**
+> Governance 声明与 Compliance 门禁是不同层级的对象，但大多数企业没有建立从前者到后者的编译层。
 
 例如：
 
 > 所有具备外部副作用的 AI Agent，在执行支付、外发通信或数据写入前，必须完成 capability 校验，并在高影响场景下经过人工审批。
 
-这首先是一条 **Governance 声明**，它表达“组织认为应该做什么”。但要让它在系统里产生约束力，必须经过至少三个阶段的技术编译。
+这首先是一条 Governance 声明，表达“组织认为应该做什么”。但要让它在系统里产生约束力，必须经过至少三个阶段的技术编译。
 
 #### 阶段 A：语义解析
 
@@ -170,7 +170,7 @@ var governanceControls = map[string]EvaluatorFunc{
 }
 ```
 
-此时，Governance 声明才第一次被转化为系统真正可以执行的 Compliance 机制。
+到这一步，Governance 声明才被转化为系统可以执行的 Compliance 机制。
 
 #### 阶段 C：控制面强制执行
 
@@ -202,7 +202,7 @@ Audit Trail:
 * 供应商接入；
 * 变更管理。
 
-执行断裂的本质，不是“原则写得不够多”，而是 **Governance 声明没有被编译为可机读、可执行、可审计的 Compliance 契约**。本文后续提出的 `Semantic Graph → Contract Layer → Governance Control Plane`，本质上就是为了填补这条编译链。
+执行断裂的原因不是“原则写得不够多”，而是 Governance 声明没有被编译为可机读、可执行、可审计的 Compliance 契约。本文后续提出的 `Semantic Graph → Contract Layer → Governance Control Plane` 就是为了填补这条编译链。
 
 ### 1.4 演化断裂
 
@@ -233,7 +233,7 @@ AI Governance 不是纯技术问题。不同判断需要不同责任主体：
 
 如果所有判断都被写成“LLM 推断”或“系统自动分类”，那么系统会缺少责任链，无法经受审计。
 
-因此，我们需要的不是一个“会回答合规问题的知识库”，而是一个能将政策、capability、agent、证据、审批和执行连接起来的**治理控制面**。
+因此，需要的不是一个“会回答合规问题的知识库”，而是一个能将政策、capability、agent、证据、审批和执行连接起来的治理控制面。
 
 ---
 
@@ -243,9 +243,9 @@ AI Governance 不是纯技术问题。不同判断需要不同责任主体：
 
 ### 2.1 Operational Ontology：把业务语义变成可执行控制面
 
-Palantir Ontology 代表了一类重要思想：企业语义模型不只是查询层或报表层，而是运营系统的中间层。
+Palantir Ontology 代表了一类做法：企业语义模型不只是查询层或报表层，而是运营系统的中间层。
 
-可以将这类 Operational Ontology 的工程价值抽象为四个维度：
+这类 Operational Ontology 的工程价值可以拆成四个维度：
 
 ```text
 Data × Logic × Action × Security
@@ -264,7 +264,7 @@ Data × Logic × Action × Security
 
 Karpathy 的 LLM Wiki 提出了一种与传统 RAG 不同的知识管理思路：不在每次查询时临时检索、拼接和综合信息，而是在新来源进入时，由 LLM 将信息增量编译进一个持久化知识结构。
 
-这个模式的关键价值不是 Markdown，也不是个人 Wiki，而是三个机制：
+这个模式的价值来自三个机制，而不是 Markdown 或个人 Wiki 这一载体本身：
 
 * **Ingest**：新来源进入时，LLM 提取信息、更新概念、补充证据和关系；
 * **Query as contribution**：好的查询结果可以沉淀回知识库；
@@ -279,7 +279,7 @@ Karpathy 的 LLM Wiki 提出了一种与传统 RAG 不同的知识管理思路�
 * 它缺少权限、证据链、审批流、回归测试和审计保全；
 * 企业合规知识不是越积累越好，而是必须区分有效、失效、适用、不适用、被取代、待审核和被拒绝。
 
-在企业场景中，LLM 增量构建的价值不是“自动形成真理”，而是**持续提出可审核的结构化变更建议**。
+在企业场景中，LLM 增量构建的作用是持续提出可审核的结构化变更建议，而不是“自动形成真理”。
 
 ### 2.3 核心洞见：借鉴模式，替换载体，限制权限
 
@@ -420,7 +420,7 @@ Governance Control Plane
 
 但这也意味着实现方案必须接受 LTBase 当前的边界条件：
 
-* 运营图谱主存储更适合采用 **PostgreSQL + Forma 混合模式**，而不是专门图数据库；
+* 运营图谱主存储更适合采用 PostgreSQL 加 Forma 的混合模式，而不是专门图数据库；
 * Policy 决策初期更适合建立在现有 compliance evaluator 之上，而不是立即引入新的 policy engine；
 * 审批流优先使用 LTFlow 状态机，而不是引入 Temporal/Camunda 类系统；
 * 治理控制面 UI 初期更适合扩展现有 control plane，而不是建设独立治理产品前端。
@@ -876,7 +876,7 @@ RDF / SKOS / SHACL 作为互操作边界
 
 这避免了在工程友好性和语义标准化之间做非此即彼的选择。
 
-如果基于 LTBase 落地，这里的“Property Graph”应优先理解为 **`semantic_resource` + `semantic_relation` + Forma entity payload** 的混合实现，而不是默认引入 Neo4j 或 Neptune。
+如果基于 LTBase 落地，这里的“Property Graph”应优先理解为 `semantic_resource`、`semantic_relation` 与 Forma entity payload 的混合实现，而不是默认引入 Neo4j 或 Neptune。
 
 推荐的存储职责拆分是：
 
@@ -894,7 +894,7 @@ Forma entity:
   - RDF / SKOS / SHACL 导出与交换
 ```
 
-这种设计能够最大化复用 LTBase 现有基础设施，但也存在明确缺口：
+这种设计可以复用 LTBase 现有基础设施，但也存在明确缺口：
 
 * `semantic_resource` 当前只有较少的 `ResourceKind` / `RelationKind`，需要为治理场景新增类型体系；
 * PostgreSQL 语义层适合运营查询和有限遍历，但对复杂多跳法规推理、跨本体对齐和大规模路径分析并不是最优；
@@ -942,9 +942,9 @@ func (t *CreateClaimTool) Execute(ctx context.Context, input json.RawMessage) (T
 }
 ```
 
-关键点：LLM 仅负责提案，API 负责 schema、权限、来源和状态机约束的校验（详参 2.3 与 3.2 节）。高影响变更必须经过人工审核后，才能进入可执行路径。
+LLM 仅负责提案，API 负责 schema、权限、来源和状态机约束的校验（详参 2.3 与 3.2 节）。高影响变更必须经过人工审核后，才能进入可执行路径。
 
-如果基于 LTBase 落地，这一层更适合实现为 **LTAgent Tool + Go service API**，而不是让 LLM 直接操作数据库或自由编辑文档。也就是说，上述接口在工程上应映射为：
+如果基于 LTBase 落地，这一层更适合实现为 LTAgent Tool 加 Go service API，而不是让 LLM 直接操作数据库或自由编辑文档。上述接口在工程上应映射为：
 
 * LTAgent 中的治理专用 tool，例如 `create_claim`, `create_agent_rule_proposal`, `attach_evidence`；
 * `ltbase.api` 中的 governance service，对 schema、权限、来源和状态流转做集中校验；
@@ -1046,8 +1046,8 @@ LLM 可以建议修改组织解释，但不应直接改写 canonical definition�
 
 本文区分两类防篡改日志：
 
-- **Governance Event Log（治理事件日志）：** 记录语义层所有对象（ActionClaim、AgentRule、EnforcementControl、AuditEvidence）的创建、状态变更、批准和取代，面向「谁在什么时候对图谱做了什么」。
-- **Execution Audit Log（执行审计日志，见 7.4 节）：** 记录控制面关键路径上的策略判断、审批决策、动作副作用和补偿动作，面向「系统在什么时候依据什么做出了什么决定」。
+- **Governance Event Log（治理事件日志）：** 记录语义层所有对象（ActionClaim、AgentRule、EnforcementControl、AuditEvidence）的创建、状态变更、批准和取代，回答「谁在什么时候对图谱做了什么」。
+- **Execution Audit Log（执行审计日志，见 7.4 节）：** 记录控制面关键路径上的策略判断、审批决策、动作副作用和补偿动作，回答「系统在什么时候依据什么做出了什么决定」。
 
 两者共享相同的防篡改机制（hash chain、WORM、signed timestamp），但服务于不同的审计用途：前者用于图谱可信度审计，后者用于执行合规审计。
 
@@ -1220,7 +1220,7 @@ var FlagSensitiveAgentActionContract = GovernanceActionContract{
 }
 ```
 
-重要工程现实：
+这里有一条工程约束：
 
 > 对单一事务域内的状态变更可以使用 ACID；对跨系统副作用，例如 JIRA、Slack、CI/CD、IAM、agent registry 和 data catalog，应使用 Saga、幂等键、补偿动作和 outbox pattern 保证最终一致和可审计。
 
@@ -1269,7 +1269,7 @@ approvalDef := ltflow.Definition{
 
 这种拆分让审批流程可以被多个 Policy 或 Action 复用，也让审批链变更不必强行修改 Action Contract。
 
-这一层与 LTFlow 的匹配度很高。LTFlow 已经具备：
+这一层与 LTFlow 的匹配度较高。LTFlow 已经具备：
 
 * 状态机定义；
 * 条件判断与事件驱动迁移；
@@ -1505,7 +1505,7 @@ ApprovalTask #2026-0312
 
 ### 7.4 Execution Audit Log：控制面的防篡改审计日志
 
-> **注意：本节的 Execution Audit Log 与 5.5 节的 Governance Event Log 是不同的日志实体。** 前者记录控制面关键路径上的策略判断、审批决策、动作副作用和补偿动作；后者记录语义层对象的创建与状态变更。详见 5.5 节中的区分说明。
+> **注意：本节的 Execution Audit Log 与 5.5 节的 Governance Event Log 是不同的日志实体。** 前者记录控制面关键路径上的策略判断、审批决策、动作副作用和补偿动作；后者记录语义层对象的创建与状态变更。区分见 5.5 节。
 
 审计日志不应仅依赖数据库权限实现“不可变”。更合理的是 tamper-evident 设计。
 
@@ -1670,7 +1670,7 @@ ApprovalTask / ActionRiskRecord / action pause
 
 ### 9.2 语义层摄入
 
-这一阶段主要属于 **Governance**：系统在提取事实、用途和潜在风险分类，为后续合规验证准备结构化输入。
+这一阶段主要属于 Governance：系统在提取事实、用途和潜在风险分类，为后续合规验证准备结构化输入。
 
 LLM Agent 读取 capability snapshot、tool 请求和执行上下文，生成结构化提案。
 
@@ -1705,7 +1705,7 @@ executable = false
 
 ### 9.3 人工审核 ActionClaim
 
-这一阶段处于 **Governance → Compliance** 的转换带：业务 owner、合规和法务分别确认事实、风险分类和法律解释，使原本的治理判断进入可执行状态。
+这一阶段处于 Governance 到 Compliance 的转换带：业务 owner、合规和法务分别确认事实、风险分类和法律解释，使原本的治理判断进入可执行状态。
 
 审批任务发送给 SystemOwner 和 ComplianceOfficer。
 
@@ -1736,11 +1736,11 @@ status = ACCEPTED
 authority_level = LEGAL_APPROVED
 ```
 
-> **注意：** 此处的 SystemOwner/ComplianceOfficer 批准的是 **ActionClaim 本身的正确性**——即「该 agent 确实具备支付写能力，且退款操作确实属于高影响外部动作」这一分类主张是否成立。这是 **Governance 层的语义判断**，不是对本次执行操作的批准。执行操作的合规性审批见 9.6 节。
+> **注意：** 此处的 SystemOwner/ComplianceOfficer 批准的是 ActionClaim 本身的正确性——即「该 agent 确实具备支付写能力，且退款操作确实属于高影响外部动作」这一分类主张是否成立。这是 Governance 层的语义判断，不是对本次执行操作的批准。执行操作的合规性审批见 9.6 节。
 
 ### 9.4 契约层触发
 
-这一阶段主要属于 **Compliance**：系统不再只是理解“应该做什么”，而是开始计算“当前动作是否满足要求、缺什么、谁来批”。
+这一阶段主要属于 Compliance：系统不再只是理解“应该做什么”，而是开始计算“当前动作是否满足要求、缺什么、谁来批”。
 
 已批准 ActionClaim 触发 `flag-sensitive-agent-action` Action Contract。
 
@@ -1762,7 +1762,7 @@ evidence_required:
 
 ### 9.5 控制面执行
 
-这一阶段是 **Compliance 的执行面**：策略决策、审批任务、证据缺口和副作用都被强制接入关键路径。
+这一阶段是 Compliance 的执行面：策略决策、审批任务、证据缺口和副作用都被强制接入关键路径。
 
 Action Engine 通过 Saga 执行跨系统副作用：
 
@@ -1793,7 +1793,7 @@ Action Engine 通过 Saga 执行跨系统副作用：
 
 ### 9.6 审批与条件批准
 
-> **注意：** 与 9.3 节不同，此处的 ComplianceOfficer 和 SecurityOwner 批准的是 **本次具体执行操作的合规性**——即在证据齐全、分类已确认的前提下，是否允许本次退款实际执行。这是 **Compliance 层的执行决策**，可能附条件（如要求 operator 二次确认、后续监控）。9.3 节是对 ActionClaim 的分类审核，本节是对执行行为的合规审批。
+> **注意：** 与 9.3 节不同，此处的 ComplianceOfficer 和 SecurityOwner 批准的是本次具体执行操作的合规性——即在证据齐全、分类已确认的前提下，是否允许本次退款实际执行。这是 Compliance 层的执行决策，可能附条件（如要求 operator 二次确认、后续监控）。9.3 节是对 ActionClaim 的分类审核，本节是对执行行为的合规审批。
 
 ComplianceOfficer 批准，但附加条件：
 
@@ -1982,7 +1982,7 @@ err = governanceService.UpdateClaimStatus(ctx, UpdateClaimStatusRequest{
 
 ## 12. 基于 LTBase / LTFlow 的技术选型与能力缺口
 
-下表不是抽象市场选型，而是把本文方案映射到 LTBase 当前基础设施，并明确哪些能力已经有基座，哪些仍需补齐。
+下表把本文方案映射到 LTBase 当前基础设施，说明哪些能力已经有基座，哪些仍需补齐，而不是做抽象的市场选型。
 
 | 层次 | 本文需要的能力 | LTBase / LTFlow 当前可复用能力 | 当前缺口 / 不足 |
 | ---- | -------------- | ------------------------------ | --------------- |
@@ -1998,7 +1998,7 @@ err = governanceService.UpdateClaimStatus(ctx, UpdateClaimStatusRequest{
 | 监控层 | 行为异常、complaint、policy change impact | 可复用 LTSearch、DuckDB、LTFlow 定时流程 | 缺少治理专用 MonitoringSignal 模型与自动 re-evaluation 流程 |
 | 集成层 | JIRA / Slack / CI/CD / IAM write-back | 现有 tool / webhook / adapter 模式可复用 | 缺少治理场景统一 adapter contract 与失败补偿框架 |
 
-综合来看，LTBase / LTFlow 已经能够覆盖本文架构的 **骨架能力**：
+综合来看，LTBase / LTFlow 已经能够覆盖本文架构的骨架能力：
 
 * 语义层基座；
 * agent 与 LLM 编排；
@@ -2007,7 +2007,7 @@ err = governanceService.UpdateClaimStatus(ctx, UpdateClaimStatusRequest{
 * 控制面 API 与前端；
 * 搜索、向量与嵌入能力。
 
-但要把它们提升为一个真正可用于 AI Governance 的控制面，仍然至少需要补齐以下功能包：
+但要把它们提升为可用于 AI Governance 的控制面，仍然至少需要补齐以下功能包：
 
 ```text
 1. Governance schema pack
@@ -2162,7 +2162,7 @@ Backlog Wave 3:
 
 ## 14. 结论
 
-AI Agent Governance & Compliance 的核心挑战，不是让模型回答“这条规则是什么意思”，而是把不断演化的治理知识转化为可审核、可测试、可执行的企业控制面。
+AI Agent Governance & Compliance 的主要挑战不是让模型回答“这条规则是什么意思”，而是把不断演化的治理知识转化为可审核、可测试、可执行的企业控制面。
 
 Operational Ontology 证明了业务语义可以成为企业运营系统的一部分，但传统本体建设往往自顶向下、专家驱动、变更成本高。LLM 增量知识编译提供了一种持续吸收新来源、更新知识结构的模式，但它本身不能承担企业合规中的授权、审计和执行责任。
 
@@ -2179,11 +2179,11 @@ Operational Ontology 证明了业务语义可以成为企业运营系统的一�
 
 但也必须明确：当前 LTBase / LTFlow 覆盖的是“可落地的基础能力”，还不是“现成完整的治理产品”。治理专用 schema、policy runtime 扩展、审计账本、高级审批能力、治理工作台和 write-back 适配器仍需专项建设。
 
-这不是“一套方案自动解决合规”，而是一种把合规知识转化为可执行治理控制面的架构模式。
+本文提出的是一种把合规知识转化为可执行治理控制面的架构模式，而不是一套自动解决合规的方案。
 
 它的目标是：
 
-> 让治理系统的演化速度跟上 AI Agent 与企业政策的演化速度，同时保持企业级的可靠性、可审计性和责任可追溯性。
+> 让治理系统的演化速度跟上 AI Agent 与企业政策的演化速度，同时保持可靠性、可审计性和责任可追溯性。
 
 ---
 

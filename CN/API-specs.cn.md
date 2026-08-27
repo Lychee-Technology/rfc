@@ -1,6 +1,6 @@
 # LTBase API 规格索引
 
-本文档作为 LTBase API 规格的入口，按 service 拆分后的文档如下。
+本文档是 LTBase API 规格的入口，按 service 拆分后的文档如下。
 
 - 文档语言：中文
 - 更新日期：2026-07-17

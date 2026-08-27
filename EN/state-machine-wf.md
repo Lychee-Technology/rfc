@@ -8,7 +8,7 @@ The engine is modeled as a state-machine orchestration system. Given an `(instan
 
 The engine does not execute long-running business logic directly. All external work is delegated to workers or infrastructure services through durable commands written to a transactional outbox.
 
-This revision strengthens the previous draft in the following areas:
+This revision differs from the previous draft in the following areas:
 
 - Outbox ordering is now a first-class correctness guarantee instead of an open question.
 - Action execution is split into a pure planning phase and a state-mutation phase to bound transaction work.
@@ -49,7 +49,7 @@ The following are intentionally out of scope:
 6. Built-in human approval UI.
 7. Multi-region active-active consensus.
 
-The distinction in non-goal #1 matters: actions in this engine are constrained, but they are **not** required to be replayable. A given `(input context, params)` should produce the same `[]CommandSpec`, but the engine does not record action inputs/outputs in a way that allows re-deriving past results from scratch.
+The distinction in non-goal #1 matters: actions in this engine are constrained, but they are not required to be replayable. A given `(input context, params)` should produce the same `[]CommandSpec`, but the engine does not record action inputs/outputs in a way that allows re-deriving past results from scratch.
 
 ---
 
@@ -115,11 +115,11 @@ The plan phase is forbidden from performing external I/O. A sentinel context fla
 
 ### 3.8 Transactional Idempotency
 
-Idempotency is enforced inside the same transaction as the state transition via a unique constraint on `(instance_id, idempotency_key)`. There is no separate "processing" phase visible to other readers — the engine commits in a single transaction, so idempotency records have only succeeded or failed terminal states.
+Idempotency is enforced inside the same transaction as the state transition via a unique constraint on `(instance_id, idempotency_key)`. There is no separate "processing" phase visible to other readers: the engine commits in a single transaction, so idempotency records have only succeeded or failed terminal states.
 
 ### 3.9 Complete, Bounded Audit History
 
-Every accepted event, rejected stale callback, transition, command emission, task lifecycle change, and workflow lifecycle change is recorded as workflow history. History is append-only but **not** infinite — terminal instances and their associated rows have an explicit retention policy (Section 35).
+Every accepted event, rejected stale callback, transition, command emission, task lifecycle change, and workflow lifecycle change is recorded as workflow history. History is append-only but not infinite: terminal instances and their associated rows have an explicit retention policy (Section 35).
 
 ---
 
@@ -230,7 +230,7 @@ Owns persistence. Exposes a `UnitOfWork` abstraction over per-aggregate stores. 
 
 ### 6.4 Outbox Relay
 
-Publishes outbox messages. Responsibilities: claim pending messages with fencing tokens, publish with at-least-once delivery, retry transient failures with backoff, dead-letter permanent failures, **preserve per-partition-key ordering**, and record attempts/errors. Implementations may be polling-based or CDC-based; both must satisfy the same contract.
+Publishes outbox messages. Responsibilities: claim pending messages with fencing tokens, publish with at-least-once delivery, retry transient failures with backoff, dead-letter permanent failures, preserve per-partition-key ordering, and record attempts/errors. Implementations may be polling-based or CDC-based; both must satisfy the same contract.
 
 ### 6.5 Callback Gateway
 
@@ -238,7 +238,7 @@ Receives callbacks. Responsibilities: authenticate the source (signature, mTLS, 
 
 ### 6.6 Timer Provider
 
-External service that fires callbacks after a configured delay. Examples: AWS EventBridge Scheduler, Cloud Tasks, delayed queues, DB-backed schedulers. The engine never calls the provider directly — schedule/cancel requests go through the outbox.
+External service that fires callbacks after a configured delay. Examples: AWS EventBridge Scheduler, Cloud Tasks, delayed queues, DB-backed schedulers. The engine never calls the provider directly; schedule/cancel requests go through the outbox.
 
 ### 6.7 External Workers
 
@@ -522,7 +522,7 @@ Failure cases:
 | Wrong event                  | Reject with logical error                                    |
 | Instance terminal            | Stale: same as state/version mismatch                        |
 
-History writes for stale callbacks are **deduplicated within a short window per task token** — a single `callback_ignored` history row records the first occurrence and a counter; subsequent stale callbacks within the window only update the counter. This bounds the cost of replay attacks even if rate limiting fails.
+History writes for stale callbacks are deduplicated within a short window per task token: a single `callback_ignored` history row records the first occurrence and a counter, and subsequent stale callbacks within the window only update the counter. This bounds the cost of replay attacks even if rate limiting fails.
 
 ---
 
@@ -562,9 +562,9 @@ type CallbackRequest struct {
 }
 ```
 
-The default deployment requires signature-based auth. The token hash alone is **not** the security boundary; signature provides authenticity, the token provides authorization scope.
+The default deployment requires signature-based auth. The token hash alone is not the security boundary; the signature provides authenticity, the token provides authorization scope.
 
-Callbacks do not include `instance_id` — the engine resolves it through the persisted task record, preventing callers from forging cross-instance writes.
+Callbacks do not include `instance_id`; the engine resolves it through the persisted task record, so callers cannot forge cross-instance writes.
 
 ---
 
@@ -718,7 +718,7 @@ type OutboxMessage struct {
 
 ### 13.5 Delivery Semantics
 
-The outbox provides **at-least-once delivery with per-partition FIFO ordering**.
+The outbox provides at-least-once delivery with per-partition FIFO ordering.
 
 Concretely:
 
@@ -736,7 +736,7 @@ Partition key construction:
 | `start_sub_workflow` / `cancel_sub` | `instance_id:child:{link_id}`                      |
 | `emit_notification`                 | configurable; default `instance_id`                |
 
-This is what keeps "cancel old timer" and "schedule new timer" from racing each other — they target the same logical timer slot and therefore share a partition.
+This keeps "cancel old timer" and "schedule new timer" from racing each other: they target the same logical timer slot and therefore share a partition.
 
 ---
 
@@ -784,7 +784,7 @@ Indexes:
 
 ### 14.3 Why a Surrogate Key
 
-Using `parent_task_hash` directly as PK is fragile under retry: if a transition has to be replayed, the engine may need to insert/upsert the link before the parent task is fully finalized. A surrogate `link_id` lets the engine reason about link lifecycle independently from task lifecycle, and leaves room for fan-out (multiple children per parent task — out of scope for v1 but not blocked).
+Using `parent_task_hash` directly as PK is fragile under retry: if a transition has to be replayed, the engine may need to insert/upsert the link before the parent task is fully finalized. A surrogate `link_id` lets the engine reason about link lifecycle independently from task lifecycle, and leaves room for fan-out (multiple children per parent task, out of scope for v1 but not blocked).
 
 ---
 
@@ -1080,7 +1080,7 @@ type Action interface {
 Plan-phase rules:
 
 1. No blocking external I/O.
-2. No queue publishing, no timer scheduling, no child workflow creation — those return as `CommandSpec`.
+2. No queue publishing, no timer scheduling, no child workflow creation; those return as `CommandSpec`.
 3. No reading of mutable shared state outside `EvalContext`.
 4. Side effects on `EvalContext.Payload` are forbidden; payload changes are returned via `PayloadPatch`.
 
@@ -1093,7 +1093,7 @@ type Guard interface {
 }
 ```
 
-Guard evaluation must be pure and side-effect-free. A guard error is treated as `Retryable` — the engine rolls the transition back and the caller may retry.
+Guard evaluation must be pure and side-effect-free. A guard error is treated as `Retryable`: the engine rolls the transition back and the caller may retry.
 
 ### 19.4 Mapper Runtime
 
@@ -1131,7 +1131,7 @@ type ActionError struct {
 | `Retryable` | Roll back transaction; return `503` to caller; idempotency record not committed; safe to retry. |
 | `Fatal`     | Roll back the *transition*; commit a separate transaction that writes a `HistoryActionPlanFailed` event and (per definition policy) either keeps the instance in its current state or moves it to a configured failure state; return `409` or `500` to the caller. |
 
-Whether `Fatal` should fail the instance is configurable per workflow definition (`OnActionFatalError: hold | fail`). Default is `hold`, so transient bugs do not vaporize running workflows.
+Whether `Fatal` should fail the instance is configurable per workflow definition (`OnActionFatalError: hold | fail`). Default is `hold`, so transient bugs do not destroy running workflows.
 
 ---
 
@@ -1164,7 +1164,7 @@ The instance is not visible as started until its entry tasks, outbox messages, a
 
 ### 21.1 Flow
 
-The engine performs as much work as possible **before** opening the database transaction, and writes all changes in a single late batch.
+The engine performs as much work as possible before opening the database transaction, and writes all changes in a single late batch.
 
 ```
 PHASE 1 — pre-transaction
@@ -1205,7 +1205,7 @@ PHASE 4 — commit
 18. Outbox relay eventually publishes commands (in partition order).
 ```
 
-Key invariant: every cancelled task with external side effects produces an outbox cancel command on the **same partition key** as its original schedule command. This is what guarantees the relay delivers them in order, so the timer service sees `schedule(T1) → cancel(T1)` and not `cancel(T1) → schedule(T1)`.
+Key invariant: every cancelled task with external side effects produces an outbox cancel command on the same partition key as its original schedule command. This guarantees the relay delivers them in order, so the timer service sees `schedule(T1) → cancel(T1)` and not `cancel(T1) → schedule(T1)`.
 
 ### 21.2 Concurrency Conflict Handling
 
@@ -1255,7 +1255,7 @@ A second callback with the same token after task completion does not apply the t
 When entering a state with `Timeout`:
 
 1. Engine creates a timeout task bound to current state and version.
-2. Engine assigns partition key `instance_id:timer:{logical_timer_id}`. The logical timer ID is derived from `(instance_id, state)` — there is exactly one timer per state.
+2. Engine assigns partition key `instance_id:timer:{logical_timer_id}`. The logical timer ID is derived from `(instance_id, state)`; there is exactly one timer per state.
 3. Engine writes a `CommandScheduleTimer` outbox message on this partition key.
 4. Outbox relay calls the timer provider in partition order.
 
@@ -1267,7 +1267,7 @@ Identical to worker callback (Section 22), but the gateway authenticates the tim
 
 When a workflow leaves a state before timeout fires:
 
-1. The transition flow in Section 21 cancels the pending task and emits `CommandCancelTimer` on the **same partition key** as the schedule command.
+1. The transition flow in Section 21 cancels the pending task and emits `CommandCancelTimer` on the same partition key as the schedule command.
 2. The relay delivers cancel after schedule (FIFO per partition).
 3. Even if cancel is dropped or arrives after the timer fires, the resulting callback is stale (state/version mismatch) and is ignored.
 
@@ -1310,7 +1310,7 @@ This flow keeps "parent and child in the same DB cluster" and "parent and child 
 When a child instance reaches a terminal state:
 
 1. Child engine notices the link reference (stored as part of child instance metadata).
-2. Child engine maps child output via the parent's `OutputMapper` reference (resolved on the child side, since mappers are registered globally) — or, if cross-cluster, the child includes the raw output and parent maps on receipt.
+2. Child engine maps child output via the parent's `OutputMapper` reference (resolved on the child side, since mappers are registered globally), or, if cross-cluster, the child includes the raw output and the parent maps on receipt.
 3. Child engine emits an outbox callback to the parent's callback endpoint with the parent task token and event `OnCompletedEvent` (success) or `OnFailedEvent` (failure).
 4. Parent callback gateway processes the callback as a normal worker callback (Section 22).
 5. Parent updates the link status to `completed` / `failed` in the same transaction as the parent state transition.
@@ -1548,7 +1548,7 @@ PK `(instance_id, idempotency_key)`. Index `(eligible_cleanup_at)`.
 
 Indexes: `(status, partition_key, created_at)` for ordered claim; `(locked_until)` for lease recovery.
 
-The relay's claim query selects, per partition key, only the **earliest** non-`published` message — this is what enforces FIFO per partition.
+The relay's claim query selects, per partition key, only the earliest non-`published` message; this is what enforces FIFO per partition.
 
 ### 29.6 `workflow_links`
 
@@ -1639,7 +1639,7 @@ The `NOT EXISTS` subquery is what enforces per-partition FIFO: the relay will no
 
 ### 30.3 Dead-Letter Handling
 
-A message moves to `dead_letter` after exceeding `max_attempts` or on classified-as-permanent errors. **Critical caveat:** dead-lettering a message in a partition unblocks subsequent messages in the same partition, which may not be safe. By default, when any message in a partition dead-letters, the engine raises an alert and blocks further publishing on that partition until an operator resolves. This is configurable per command type.
+A message moves to `dead_letter` after exceeding `max_attempts` or on classified-as-permanent errors. **Caveat:** dead-lettering a message in a partition unblocks subsequent messages in the same partition, which may not be safe. By default, when any message in a partition dead-letters, the engine raises an alert and blocks further publishing on that partition until an operator resolves it. This is configurable per command type.
 
 ### 30.4 Lock Recovery
 
@@ -1666,7 +1666,7 @@ The default callback gateway requires:
 2. **Timestamp tolerance.** Callbacks with `timestamp` skew > 5 minutes are rejected.
 3. **Optional mTLS** at the transport layer for higher-trust deployments.
 
-The token alone is **not** the security boundary. A leaked token without a valid signature is rejected.
+The token alone is not the security boundary. A leaked token without a valid signature is rejected.
 
 ### 31.3 Payload Security
 
@@ -1860,7 +1860,7 @@ If a partition is blocked due to a dead-lettered message, ops can:
 
 1. Inspect and fix the dead-lettered message's payload (if it's a content bug).
 2. Requeue manually (`status` back to `pending`, reset `attempts`).
-3. Skip-and-acknowledge (mark as published despite the failure) — destructive, only with operator confirmation.
+3. Skip-and-acknowledge (mark as published despite the failure). This is destructive, and requires operator confirmation.
 
 ### 36.4 Replay-from-Cold-Storage
 
@@ -1890,7 +1890,7 @@ The previous draft listed ten open questions, several of which have been resolve
 3. Persistent task token table with hashed storage.
 4. Task token to `(instance, state, version)` binding.
 5. Transactional idempotency (single-phase, no in-flight status).
-6. Transactional outbox **with per-partition FIFO ordering**.
+6. Transactional outbox with per-partition FIFO ordering.
 7. Optimistic locking on instance updates.
 8. Two-phase action execution with classified errors.
 9. Terminal state and instance status handling.
@@ -1933,8 +1933,8 @@ This revised design defines a serverless-first workflow engine whose correctness
 
 1. **Persistent task tokens bound to `(instance, state, version)`.** This makes duplicate, stale, and racing callbacks safe by construction.
 2. **Transactional outbox with per-partition FIFO ordering.** This eliminates the cancel-before-schedule class of races and makes ordered command sequences trustworthy without distributed coordination.
-3. **Two-phase actions with classified errors.** This bounds the work an action can do inside a transaction and makes the failure mode of business logic explicit instead of accidental.
-4. **Decomposed repository with strict transaction boundaries.** This makes the atomicity contract testable and the storage backend pluggable without leaking responsibilities into the engine.
+3. **Two-phase actions with classified errors.** This bounds the work an action can do inside a transaction, and the failure mode of business logic becomes explicit instead of accidental.
+4. **Decomposed repository with strict transaction boundaries.** The atomicity contract becomes testable and the storage backend pluggable, without leaking responsibilities into the engine.
 
 Compared to the previous draft, this revision (a) promotes outbox ordering and idempotency-record retention from open questions to first-class guarantees, (b) replaces the god-interface repository with per-aggregate stores under a unit-of-work, (c) defines the action failure contract instead of leaving it to interpretation, (d) makes sub-workflow callback transport uniform across deployment topologies, and (e) treats stuck-instance detection as part of the operational baseline rather than a future concern.
 

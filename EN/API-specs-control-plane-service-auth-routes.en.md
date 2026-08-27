@@ -33,16 +33,16 @@ How routes are served:
 
 Namespace ownership note: the `/api/v1/auth/*` namespace is shared by two services. `cmd/authservice` is a separate end-user token service that serves `health`, `refresh`, `revoke`, `profile/{user_id}`, plus the `login/{provider}` and `id_bindings/{provider}` identity routes (see `internal/authservice/routes.go` and `API-specs-authservice.en.md`). This document describes the admin surface served by the control plane; the two route sets do not overlap.
 
-## 2. Authentication, Scope, and Shared Conventions
+## 2. Authentication, scope, and shared conventions
 
-### 2.1 Admin Authentication
+### 2.1 Admin authentication
 
-The control-plane admin REST API uses Bearer JWT authentication, with authorization based on an **admin policy binding** (`api_authorizer.go`):
+The control-plane admin REST API uses Bearer JWT authentication, with authorization based on an admin policy binding (`api_authorizer.go`):
 
 - A request with no JWT claims returns `401 unauthorized`.
-- Access is granted when the caller (the user resolved from the JWT subject) holds — via `principal_policy_attachment`, directly or indirectly through a role — the policy whose **slug is `admin.controlplane`**.
+- Access is granted when the caller (the user resolved from the JWT subject) holds the policy whose slug is `admin.controlplane`, via `principal_policy_attachment`, either directly or indirectly through a role.
 - When no policy in the project carries that slug yet (e.g. a deployment that predates slug backfill), the authorizer falls back to the legacy policy id `generated#permission#controlplane.admin` (emitted by the legacy migration).
-- The check does not inspect role slugs and does not inspect the policy document's contents — it is a single binding-based grant.
+- The check does not inspect role slugs and does not inspect the policy document's contents; it is a single binding-based grant.
 
 Unauthenticated requests return:
 
@@ -66,9 +66,9 @@ Authenticated requests without the admin policy return:
 
 All `/api/v1/auth/...` routes (any method) require admin. Unknown routes 404 only after authorization.
 
-**The one exception: CORS preflight.** Any `OPTIONS` request returns `204 No Content` **before** authorization and route matching (CORS headers only, no body — and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
+The one exception is CORS preflight. Any `OPTIONS` request returns `204 No Content` before authorization and route matching (CORS headers only, no body, and therefore no `request_id` envelope). Preflight is not a normal API response and is exempt from this section's authorization rules and the §2.3 envelope conventions.
 
-### 2.2 Project Scope
+### 2.2 Project scope
 
 LTBase currently supports single-project private deployment for the control plane.
 
@@ -78,7 +78,7 @@ Therefore:
 - clients must not provide `project_id` in the path, query, headers, or request body
 - the server may return `project_id` as read-only metadata in responses
 
-### 2.3 Success and Error Envelopes
+### 2.3 Success and error envelopes
 
 Every response carries a top-level `request_id`.
 
@@ -117,7 +117,7 @@ Error shape:
 
 Optional field-level or validation diagnostics may be returned as `details`.
 
-### 2.4 Common Status Codes
+### 2.4 Common status codes
 
 - `200 OK`
 - `201 Created`
@@ -129,7 +129,7 @@ Optional field-level or validation diagnostics may be returned as `details`.
 - `409 Conflict`
 - `500 Internal Server Error`
 
-## 3. Route Summary
+## 3. Route summary
 
 All routes below are implemented and registered in the current code.
 
@@ -167,7 +167,7 @@ All routes below are implemented and registered in the current code.
 
 The referral routes also exist under the top-level alias `/api/v1/referrals...` (same handler).
 
-## 4. Common Data Structures
+## 4. Common data structures
 
 `policy_id`, `role_id`, and binding `policy_id` are server-generated UUIDv7
 durable identifiers; `slug` and `external_key` are the human-readable /
@@ -177,11 +177,11 @@ to the durable id). Slug resolution applies to role, policy, and binding-policy
 path params; `user_id` matches only by exact value. `ou_id` and `user_id` are
 caller/identity-supplied, not server-generated.
 
-Identifier canonicalization boundary: **stored records and full resource-object
-responses** (`data.user` / `data.role` / `data.policy` / `data.binding_policy`
+Identifier canonicalization boundary: stored records and full resource-object
+responses (`data.user` / `data.role` / `data.policy` / `data.binding_policy`
 and collection items) always carry the UUIDv7. However, the small `status`
-objects returned by attach / detach / delete **echo the identifier exactly as
-supplied in the path** — when the caller passes a slug, the `role_id` /
+objects returned by attach / detach / delete echo the identifier exactly as
+supplied in the path: when the caller passes a slug, the `role_id` /
 `policy_id` / `principal_id` in the response is that slug, not the canonical
 UUID (this applies to user-role attach/detach, principal-policy attach/detach,
 and role/policy/binding-policy delete). When the durable id is needed, rely on
@@ -207,7 +207,7 @@ The user object shape returned by the user list/get and org routes (`apiPublicAu
 
 Notes:
 
-- The public DTO does **not** include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (see §5).
+- The public DTO does not include `referral_code`; only the user objects inside the `GET /api/v1/auth/config` snapshot carry `referral_code` (see §5).
 - `primary_ou_id` and `report_to_user_id` belong to the org-management contract and may be surfaced by user or org resource endpoints.
 
 ### 4.2 Role
@@ -310,7 +310,7 @@ Notes:
 - `policy_id` is optional (bound at import/create time).
 - `status` is a derived field, evaluated in order: `disabled == true` → `"disabled"`; `used_at > 0` → `"used"`; `expires_at > 0` and past → `"expired"`; otherwise → `"available"`.
 
-## 5. Auth Config Snapshot API
+## 5. Auth config snapshot API
 
 ### `GET /api/v1/auth/config`
 
@@ -358,7 +358,7 @@ Response:
 
 Snapshot field notes:
 
-- `users[]` items use a snapshot-specific user shape that **includes** `referral_code` (the public user DTO does not).
+- `users[]` items use a snapshot-specific user shape that includes `referral_code` (the public user DTO does not).
 - `org_units[]` items are OrgUnit objects (see `API-specs-control-plane.en.md` §4.2).
 - `ou_policy_attachments[]` items contain only `{ "ou_id", "policy_id" }` (no `enforced`, no timestamps).
 - `referrals[]` items use a snapshot-specific shape `{ "code", "policy_id?", "used_at", "expires_at", "created_at", "updated_at" }` (no `project_id`, `disabled`, or `status`).
@@ -373,7 +373,7 @@ Other notes:
 
 Status codes: `200`, `401`, `403`, `500 list_auth_config_failed`
 
-## 6. Auth Resource APIs
+## 6. Auth resource APIs
 
 ### 6.1 Users
 
@@ -639,7 +639,7 @@ Response (`200`):
 
 Delete conflicts return `409 role_in_use`; unknown role returns `404 not_found`.
 
-### 6.3 Policies And Policy Attachments
+### 6.3 Policies and policy attachments
 
 Implementation status: fully landed (reads, writes, attach/detach, principal policy listing).
 
@@ -742,7 +742,7 @@ Notes:
 - `policy_document.statements` is the canonical authorization model.
 - Each statement may include `effect`, `ops`, `schema`, `selector`, `condition`, and `outcome` as defined in `rfc/EN/aaa.md`.
 - `selector` may include `resource_id`, `filter`, or both.
-- The server validates `policy_document` only as well-formed JSON (then compacts it for storage); it does **not** validate the internal structure. The structural contract is defined by `rfc/EN/aaa.md` §6.
+- The server validates `policy_document` only as well-formed JSON (then compacts it for storage); it does not validate the internal structure. The structural contract is defined by `rfc/EN/aaa.md` §6.
 - OU policy attachment routes are documented in `API-specs-control-plane.en.md` because they are served under `/api/v1/org/...`.
 
 #### `GET /api/v1/auth/policies/{policy_id}`
@@ -870,7 +870,7 @@ There is no first-class REST resource for `permission_profile` or logical `resou
 - `resource_grant` may still exist as an internal physical projection of unified policies.
 - Legacy permissions and grants remain internal compatibility data and are not exposed through public REST APIs.
 
-### 6.4 Binding Policies
+### 6.4 Binding policies
 
 Implementation status: landed.
 
@@ -926,7 +926,7 @@ Request body:
 }
 ```
 
-Response (`201 Created`): nested under `data.binding_policy`; note that unlike the GET list DTO it does **not** include timestamps (a known implementation difference, documented as-is):
+Response (`201 Created`): nested under `data.binding_policy`. Unlike the GET list DTO, it does not include timestamps (a known implementation difference, documented as-is):
 
 ```json
 {
@@ -1034,7 +1034,7 @@ Error codes: `400 missing_code` (empty code), `400 code_too_long` (over 256 char
 
 Purpose: Import referral codes in batch. Any non-empty `import` query value triggers the batch mode.
 
-The request body is a JSON array; item fields are `referral_code` (required), `policy_id` (optional), `expires_at_ms` (optional, int or numeric string), and `project_id` (optional and **ignored** — the REST path always forces the deployment project; any value supplied per item is neither validated nor used. This differs from the `/control-plane` action batch mode, which requires an item `project_id` to match the top-level one):
+The request body is a JSON array; item fields are `referral_code` (required), `policy_id` (optional), `expires_at_ms` (optional, int or numeric string), and `project_id` (optional and ignored: the REST path always forces the deployment project, and any value supplied per item is neither validated nor used. This differs from the `/control-plane` action batch mode, which requires an item `project_id` to match the top-level one):
 
 ```json
 [
@@ -1066,7 +1066,7 @@ Behavior: existing codes are skipped (counted in `skipped_existing`), not errore
 
 #### `PATCH /api/v1/auth/referrals/{code}`
 
-Purpose: Update a referral code's expiration. **Only** `expires_at_ms` is accepted; any other body field, including `policy_id`, is silently ignored.
+Purpose: Update a referral code's expiration. Only `expires_at_ms` is accepted; any other body field, including `policy_id`, is silently ignored.
 
 Request body:
 
