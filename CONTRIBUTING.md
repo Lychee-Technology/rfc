@@ -36,7 +36,7 @@ Style-only changes must leave the technical substance byte-for-byte intact: code
 
 ## Machine checks
 
-There is no lint configuration yet. markdownlint was evaluated for issue #23: none of the three rules above maps to a stock rule, and the closest one, MD036 (no emphasis as heading), false-positives on the label items rule 3 allows (for example `**示例：policy profile**`). A future machine check would need custom rules; until then the rules are enforced in review.
+There is no lint configuration yet. markdownlint was evaluated for issue #23: none of the three rules above maps to a stock rule, and the closest one, MD036 (no emphasis as heading), false-positives on the label items rule 3 allows (for example `**示例：policy profile**`). prettier was also considered: it only normalizes whitespace and line wrapping and covers none of the three rules. A future machine check would need custom rules, plus an MD025 (single-title) exemption for this file's intentional dual-H1 bilingual layout; until then the rules are enforced in review.
 
 ---
 
@@ -76,4 +76,4 @@ There is no lint configuration yet. markdownlint was evaluated for issue #23: no
 
 ## 机器校验
 
-暂未引入 lint 配置。已按 issue #23 评估 markdownlint：三条规则均无现成规则可对应，最接近的 MD036（禁止用强调充当标题）会误报规则 3 允许的标签项（如 `**示例：policy profile**`）。后续如引入机器校验需要自定义规则，目前依赖评审执行。
+暂未引入 lint 配置。已按 issue #23 评估 markdownlint：三条规则均无现成规则可对应，最接近的 MD036（禁止用强调充当标题）会误报规则 3 允许的标签项（如 `**示例：policy profile**`）。prettier 也已考虑：它仅规整空白与换行，不覆盖三条规则中的任何一条。后续如引入机器校验需要自定义规则，且需为本文件有意的双 H1 双语结构豁免 MD025（单一标题）；目前依赖评审执行。
