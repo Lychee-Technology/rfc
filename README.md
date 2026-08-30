@@ -1,7 +1,7 @@
 # rfc
 Technical ideas which request for comments
 
-## API Specs
+## API specs
 
 ### English
 

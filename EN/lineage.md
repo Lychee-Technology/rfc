@@ -100,11 +100,11 @@ Lineage is recorded at the framework layer and is completely transparent to busi
 
 ### 4.0 Design rationale and capture mechanism
 
-**Why not manual instrumentation in business code**
+#### Why not manual instrumentation in business code
 
 Traditional data lineage approaches require developers to call lineage APIs explicitly in business functions: every read, transform, and write must be annotated. This creates three problems: (1) high coupling between business logic and lineage infrastructure; changing the lineage record format requires touching all business code; (2) easy to miss: lineage completeness depends on developer discipline, and any new tool or Agent added without instrumentation breaks the chain; (3) in AI Agent scenarios, LLM calls, tool dispatches, and sub-agent communications are frequent and dynamically routed, making manual instrumentation practically unmaintainable.
 
-**How the framework achieves automatic capture**
+#### How the framework achieves automatic capture
 
 All data transformations are funneled through a small number of framework-level boundaries and intercepted there:
 

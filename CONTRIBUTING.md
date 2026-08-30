@@ -36,10 +36,17 @@ Style-only changes must leave the technical substance byte-for-byte intact: code
 
 ## Machine checks
 
-There is no lint configuration yet. markdownlint was evaluated for issue #23: none of the three rules above maps to a stock rule, and the closest one, MD036 (no emphasis as heading), false-positives on the label items rule 3 allows (for example `**示例：policy profile**`). prettier was also considered: it only normalizes whitespace and line wrapping and covers none of the three rules. A future machine check would need custom rules, plus an MD025 (single-title) exemption for this file's intentional dual-H1 bilingual layout; until then the rules are enforced in review.
+The three rules above are enforced by custom markdownlint rules, added per issue #27. Stock markdownlint could not express them: issue #23 confirmed none of the three maps to a stock rule, and the closest one, MD036 (no emphasis as heading), false-positives on the label items rule 3 allows (for example `**示例：policy profile**`). prettier remains out of scope: it only normalizes whitespace and line wrapping.
+
+- The rules live in `.markdownlint/rules/` (`heading-sentence-case`, `no-spaced-em-dash`, `semantic-bold-only`), with tests in `.markdownlint/test/` and configuration in `.markdownlint-cli2.jsonc`.
+- Run `npm install` once, then `npm run lint`; `npm test` runs the rule tests. CI runs both on every pull request.
+- Rule 3 is heuristic by design: it only flags whole-line bold that reads as a sentence or pseudo-heading, and bold that restates the nearby heading. Subtler decorative bold still relies on review.
+- Documents whose headings predate rule 1 are listed in the rule's `ignoreFiles`: renaming a heading changes its anchor, so they are exempt rather than rewritten. Do not add new files to that list; remove an entry once a document's headings are cleaned up.
+- Stock markdownlint rules stay off. If they are ever enabled, keep MD025 (single-title) exempt for this file's intentional dual-H1 bilingual layout; the inline marker before the Chinese title below already covers it.
 
 ---
 
+<!-- markdownlint-disable-next-line MD025 -->
 # 贡献指南（中文）
 
 本仓库存放中英双语的 RFC 与技术规范。本文固化文档遵循的 Markdown 风格规则：规则形成于 PR #20 的 prose 清理，依 issue #23 落地，适用于仓库内全部 Markdown 文件。
@@ -76,4 +83,10 @@ There is no lint configuration yet. markdownlint was evaluated for issue #23: no
 
 ## 机器校验
 
-暂未引入 lint 配置。已按 issue #23 评估 markdownlint：三条规则均无现成规则可对应，最接近的 MD036（禁止用强调充当标题）会误报规则 3 允许的标签项（如 `**示例：policy profile**`）。prettier 也已考虑：它仅规整空白与换行，不覆盖三条规则中的任何一条。后续如引入机器校验需要自定义规则，且需为本文件有意的双 H1 双语结构豁免 MD025（单一标题）；目前依赖评审执行。
+三条规则已由自定义 markdownlint 规则强制执行（依 issue #27 落地）。现成规则无法表达：issue #23 已确认三条规则均无 stock 规则可对应，最接近的 MD036（禁止用强调充当标题）会误报规则 3 允许的标签项（如 `**示例：policy profile**`）。prettier 仍不在范围内：它仅规整空白与换行。
+
+- 规则位于 `.markdownlint/rules/`（`heading-sentence-case`、`no-spaced-em-dash`、`semantic-bold-only`），测试在 `.markdownlint/test/`，配置在 `.markdownlint-cli2.jsonc`；
+- 首次运行 `npm install`，之后 `npm run lint` 执行校验，`npm test` 运行规则测试。CI 在每个 pull request 上运行两者；
+- 规则 3 有意保持启发式：仅标记读起来像整句或伪标题的整行加粗，以及与临近标题重复的加粗。更细微的装饰性加粗仍依赖评审；
+- 标题早于规则 1 的存量文档列在该规则的 `ignoreFiles` 中：修改标题会改变锚点，因此豁免而非改写。不要向该清单添加新文件；某文档标题清理完毕后应移除对应条目；
+- stock markdownlint 规则保持关闭。若未来启用，需为本文件有意的双 H1 双语结构保留 MD025（单一标题）豁免；中文标题前的 inline 标记已覆盖。
