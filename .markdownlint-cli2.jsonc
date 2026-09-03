@@ -1,0 +1,78 @@
+// markdownlint-cli2 configuration for the LTBase RFC repository.
+//
+// Only the three custom rules from CONTRIBUTING.md ("Markdown style rules")
+// run here; the stock markdownlint rules stay off because none of them maps
+// to the repository's style rules (issue #23) and MD036 false-positives on
+// the label items rule 3 allows. If stock rules are ever enabled, keep the
+// MD025 exemption for CONTRIBUTING.md's intentional dual-H1 bilingual layout
+// (an inline marker already sits in that file). Run with: npm run lint
+{
+  "globs": ["**/*.md"],
+  "ignores": [
+    "node_modules",
+    "ref__",
+    ".claude",
+    ".opencode",
+    ".worktrees"
+  ],
+  "customRules": [
+    "./.markdownlint/rules/heading-sentence-case.cjs",
+    "./.markdownlint/rules/no-spaced-em-dash.cjs",
+    "./.markdownlint/rules/semantic-bold-only.cjs"
+  ],
+  "config": {
+    "default": false,
+    "heading-sentence-case": {
+      // True proper nouns and multi-word product terms that may keep their
+      // capitals (or, for "rfc", lowercase) anywhere in a heading. Acronyms
+      // and mixed-case words (API, OAuth, LTBase) are exempt automatically;
+      // list only words the automatic exemptions miss.
+      "properNouns": ["rfc", "Go", "Lambda", "Fargate", "Kerberos", "Windows"],
+      // Legacy documents whose headings predate CONTRIBUTING.md rule 1.
+      // Renaming a heading changes its anchor (see CONTRIBUTING.md), so these
+      // files are exempt instead of rewritten. Do not add new files here;
+      // remove an entry once its headings are cleaned up.
+      "ignoreFiles": [
+        "CN/aaa-control-plane-store-mapping.md",
+        "CN/aaa.md",
+        "CN/API-specs-authservice.cn.md",
+        "CN/API-specs-control-plane-service-auth-routes.cn.md",
+        "CN/API-specs-control-plane.cn.md",
+        "CN/API-specs-data-plane.cn.md",
+        "CN/control-plane-cli.legacy.md",
+        "CN/control-plane-cli.md",
+        "CN/control-plane-rest-admin-api.md",
+        "CN/id-token-enterprise.md",
+        "CN/JSON-Schema-Ext.md",
+        "CN/oauth-token-vault.md",
+        "CN/Ontology+LLM.md",
+        "CN/policy-permission-relationship.md",
+        "EN/aaa-control-plane-store-mapping.md",
+        "EN/aaa.md",
+        "EN/agents/harness-engineering-faq.md",
+        "EN/agents/harness-engineering.md",
+        "EN/api-specification.md",
+        "EN/API-specs-authservice.en.md",
+        "EN/API-specs-control-plane-service-auth-routes.en.md",
+        "EN/API-specs-control-plane.en.md",
+        "EN/API-specs-data-plane.en.md",
+        "EN/API-specs.en.md",
+        "EN/golang-ai_review_guideline.md",
+        "EN/IdentityArchitecture.md",
+        "EN/lineage.md",
+        "EN/LTBase-Compute.md",
+        "EN/notes-debugging-runbook.en.md",
+        "EN/olap.md",
+        "EN/ontology.md",
+        "EN/Ontology+LLM.md",
+        "EN/policy-permission-relationship.md",
+        "EN/private-deployment.md",
+        "EN/prompts/build-any-app.md",
+        "EN/routing.md",
+        "EN/state-machine-wf.md"
+      ]
+    },
+    "no-spaced-em-dash": true,
+    "semantic-bold-only": true
+  }
+}

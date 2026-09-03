@@ -79,13 +79,13 @@ Before scaling out (adding more Fargate tasks or spilling to Lambda), we scale d
 
 ### 4.1. Compute layer (ARM64)
 
-  * **A. ECS Fargate (The Warm Layer)**
+  * **A. ECS Fargate (The Warm Layer):**
 
       * **Role:** Handles steady-state traffic. It is the "Pre-warmed" buffer.
       * **Config:** 2 Tasks (Always-on), 2 vCPU / 4GB RAM per task.
       * **Scaling:** Conservative. It scales up slowly to maintain the baseline.
 
-  * **B. AWS Lambda (The Burst Layer)**
+  * **B. AWS Lambda (The Burst Layer):**
 
       * **Role:** Handles sudden spikes (Flash Crowds) that exceed the immediate concurrency limit of Fargate.
       * **Config:** 2048 MB RAM (ARM64).
